@@ -2,9 +2,7 @@
 
 ThreatLens is an Expo React Native app for personal digital safety.
 
-## Quick Setup (Recommended)
-
-Use this split workflow to keep onboarding fast and secrets out of git.
+## Quick Setup 
 
 ### Maintainer (one-time backend bootstrap)
 
@@ -56,7 +54,7 @@ This README is for a first-time contributor who just cloned the repo and wants t
 ## What You Need
 
 1. Node.js 18+ (Node.js 20 LTS recommended)
-2. npm (comes with Node)
+2. npm 
 3. Git
 4. Android Studio (for Android emulator flow)
 5. JDK 17 (required for Android build toolchain)
