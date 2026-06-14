@@ -3,11 +3,11 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-native",
-    "esModuleInterop": true
-  },
-  "paths": {
-  "@types/*": ["src/types/*"],
-  "@constants/*": ["src/constants/*"],
-  "@services/*": ["src/services/*"]
-}
+    "esModuleInterop": true,
+    "paths": {
+      "@types/*": ["src/types/*"],
+      "@constants/*": ["src/constants/*"],
+      "@services/*": ["src/services/*"]
+    }
+  }
 }

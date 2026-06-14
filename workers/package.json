@@ -1,0 +1,25 @@
+{
+  "name": "threatlens-workers",
+  "version": "1.0.0",
+  "description": "ThreatLens Trust Registry on Cloudflare Workers",
+  "main": "src/register.ts",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "deploy:register": "wrangler deploy --name threatlens-register --entry-point src/register.ts",
+    "deploy:verify": "wrangler deploy --name threatlens-verify --entry-point src/verify.ts",
+    "dev": "wrangler dev",
+    "tail:register": "wrangler tail threatlens-register",
+    "tail:verify": "wrangler tail threatlens-verify"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "trust-registry"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0"
+  },
+  "type": "commonjs"
+}

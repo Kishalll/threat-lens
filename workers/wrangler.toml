@@ -1,0 +1,20 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "threatlens-trust-registry"
+main = "src/register.ts"
+compatibility_date = "2024-11-21"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "threatlens_trust_registry"
+database_id = "" # Will be filled after creating D1 database
+
+# Workers for each endpoint
+[[workers]]
+name = "threatlens-register"
+main = "src/register.ts"
+
+[[workers]]
+name = "threatlens-verify"
+main = "src/verify.ts"
