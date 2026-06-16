@@ -1,230 +1,32 @@
 # ThreatLens
 
-ThreatLens is an Expo React Native app for personal digital safety.
+ThreatLens is an Expo React Native app for personal digital safety. It lets you verify image authenticity, scan for threats, and monitor data breaches.
 
-## Quick Setup
+## Features
 
-### Maintainer (one-time backend bootstrap)
+- Image trust verification with device-signed certificates
+- AI-powered threat scanning via Gemini
+- Data breach monitoring
+- Background notification alerts
 
-The trust registry backend runs on Cloudflare Workers + D1. See [workers/README.md](workers/README.md) for full deployment steps.
+## Install
 
-Short version:
+### Option 1 — Direct APK (Android)
 
-```bash
-cd workers
-npx wrangler login
-npx wrangler d1 create threatlens_trust_registry
-npx wrangler d1 execute threatlens_trust_registry --file=schema.sql
-cat ../master_private.pem | npx wrangler secret put MASTER_PRIVATE_KEY_PEM --name threatlens-register
-cat ../master_private.pem | npx wrangler secret put MASTER_PRIVATE_KEY_PEM --name threatlens-verify
-npx wrangler deploy src/register.ts --name threatlens-register
-npx wrangler deploy src/verify.ts --name threatlens-verify
-```
+Download the latest APK from [Releases](../../releases) and install it on your Android device.
 
-Copy the output URLs into `.env`:
+Enable **Install unknown apps** on your device if prompted.
 
-```dotenv
-EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://threatlens-register.YOUR_SUBDOMAIN.workers.dev
-```
+### Option 2 — Build from source
 
-### Contributor (new machine or next install)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full build and setup instructions.
 
-```powershell
-npm run setup:local
-```
+## Environment
 
-Then run the app:
+The app connects to a Cloudflare Workers backend for device trust registration. This is pre-configured in release builds. If you're building from source, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```bash
-npx expo run:android
-npx expo start --dev-client
-```
+## Security Notes
 
-The script:
-
-1. Creates `.env` from `.env.example` if missing
-2. Applies generated backend config if available
-3. Installs npm dependencies
-
-This README is for a first-time contributor who just cloned the repo and wants to run the app using either:
-
-1. Expo Go on a physical phone
-2. Android Studio emulator on desktop (Windows or macOS)
-
-## What You Need
-
-1. Node.js 18+ (Node.js 20 LTS recommended)
-2. npm
-3. Git
-4. Android Studio (for Android emulator flow)
-5. JDK 17 (required for Android build toolchain)
-
-## 1. Clone And Install
-
-```bash
-git clone https://github.com/Kishalll/threat_lens.git
-cd threat_lens
-npm install
-```
-
-## 2. Create Environment File
-
-Create a file named `.env` in project root.
-
-Tip: this is automatic if you run `npm run setup:local`.
-
-```dotenv
-EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://threatlens-register.YOUR_SUBDOMAIN.workers.dev
-EXPO_PUBLIC_TRUST_REGISTRY_API_KEY=your_registry_api_key
-EXPO_PUBLIC_MASTER_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-```
-
-For backend deployment details, see [workers/README.md](workers/README.md).
-
-If you change `.env`, restart Metro with cache clear:
-
-```bash
-npx expo start -c
-```
-
-## 3. Run On Phone With Expo Go
-
-Use this for fastest testing loop.
-
-1. Install Expo Go on your phone.
-2. Connect laptop and phone to the same Wi-Fi network.
-3. Start the project:
-
-```bash
-npx expo start
-```
-
-4. Scan the QR code from Expo Go.
-
-If the phone cannot connect, run tunnel mode:
-
-```bash
-npx expo start --tunnel
-```
-
-Note: Expo Go does not include custom native modules from this app, so native notification interception features are limited in Expo Go.
-
-## 4. Run On Android Studio Emulator (Windows)
-
-### 4.1 Install Android SDK Components
-
-In Android Studio, open SDK Manager and install:
-
-1. Android SDK Platform (API 34 or newer)
-2. Android SDK Build-Tools
-3. Android SDK Platform-Tools
-4. Android SDK Command-line Tools (latest)
-5. Android Emulator
-
-### 4.2 Set Environment Variables (Permanent)
-
-Set User variables:
-
-1. `JAVA_HOME` = `C:\Users\<your-user>\.jdk\jdk-17.x.x`
-2. `ANDROID_HOME` = `C:\Users\<your-user>\AppData\Local\Android\Sdk`
-3. `ANDROID_SDK_ROOT` = `C:\Users\<your-user>\AppData\Local\Android\Sdk`
-
-Add to User `Path`:
-
-1. `%JAVA_HOME%\bin`
-2. `%ANDROID_HOME%\platform-tools`
-3. `%ANDROID_HOME%\emulator`
-4. `%ANDROID_HOME%\cmdline-tools\latest\bin`
-
-Open a new terminal and verify:
-
-```powershell
-java -version
-adb version
-emulator -list-avds
-```
-
-### 4.3 Create Emulator And Run
-
-1. Android Studio > Device Manager > Create device > Start it.
-2. From project root:
-
-```powershell
-npx expo run:android
-```
-
-3. In a second terminal:
-
-```powershell
-npx expo start --dev-client
-```
-
-4. Press `a` to open on the running emulator.
-
-## 5. Run On Android Studio Emulator (macOS)
-
-### 5.1 Install Android SDK Components
-
-In Android Studio, install the same components listed in the Windows section.
-
-### 5.2 Set Environment Variables (zsh)
-
-Add this to `~/.zshrc`:
-
-```bash
-export ANDROID_HOME=$HOME/Library/Android/sdk
-export ANDROID_SDK_ROOT=$ANDROID_HOME
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-export PATH=$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-```
-
-Apply and verify:
-
-```bash
-source ~/.zshrc
-java -version
-adb version
-emulator -list-avds
-```
-
-### 5.3 Create Emulator And Run
-
-1. Android Studio > Device Manager > Create device > Start it.
-2. From project root:
-
-```bash
-npx expo run:android
-```
-
-3. In a second terminal:
-
-```bash
-npx expo start --dev-client
-```
-
-4. Press `a` to open on the running emulator.
-
-## 6. Common Issues
-
-### `adb` not recognized
-
-Android SDK paths are missing from `Path`. Add platform-tools and open a new terminal.
-
-### Java 8 is being used instead of Java 17
-
-Move Java 17 path above old Java paths in `Path`, then reopen terminal.
-
-### No Android devices found
-
-Start emulator first, then run `adb devices` and retry `npx expo run:android`.
-
-### Linking scheme warning
-
-Already configured in `app.json` with `scheme: threatlens`.
-
-## 7. Security Notes
-
-1. Never commit `.env`.
+1. Never share or commit `.env`.
 2. If any API key is exposed, rotate it immediately.
-3. Never commit `master_private.pem`; store it in Cloudflare Workers secrets only.
+3. `master_private.pem` must stay in Cloudflare Workers secrets only — never commit it.
