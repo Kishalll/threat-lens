@@ -2,30 +2,30 @@
 
 ThreatLens is an Expo React Native app for personal digital safety.
 
-## Quick Setup 
+## Quick Setup
 
 ### Maintainer (one-time backend bootstrap)
 
-Run once per project (or when rotating keys/redeploying):
+The trust registry backend runs on Cloudflare Workers + D1. See [workers/README.md](workers/README.md) for full deployment steps.
 
-```powershell
-npm run setup:cloud -- -ProjectId YOUR_GCP_PROJECT_ID -WriteEnv
+Short version:
+
+```bash
+cd workers
+npx wrangler login
+npx wrangler d1 create threatlens_trust_registry
+npx wrangler d1 execute threatlens_trust_registry --file=schema.sql
+cat ../master_private.pem | npx wrangler secret put MASTER_PRIVATE_KEY_PEM --name threatlens-register
+cat ../master_private.pem | npx wrangler secret put MASTER_PRIVATE_KEY_PEM --name threatlens-verify
+npx wrangler deploy src/register.ts --name threatlens-register
+npx wrangler deploy src/verify.ts --name threatlens-verify
 ```
 
-Optional for shared dev backend without API-key auth:
+Copy the output URLs into `.env`:
 
-```powershell
-npm run setup:cloud -- -ProjectId YOUR_GCP_PROJECT_ID -DisableApiKeyAuth -WriteEnv
+```dotenv
+EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://threatlens-register.YOUR_SUBDOMAIN.workers.dev
 ```
-
-What this script does:
-
-1. Enables required Google Cloud APIs
-2. Ensures Firestore exists
-3. Generates master key pair if missing
-4. Stores secrets in Secret Manager
-5. Deploys `register` and `verify` functions
-6. Writes local `.env` and `.setup/generated/trust-config.json`
 
 ### Contributor (new machine or next install)
 
@@ -35,7 +35,7 @@ npm run setup:local
 
 Then run the app:
 
-```powershell
+```bash
 npx expo run:android
 npx expo start --dev-client
 ```
@@ -54,7 +54,7 @@ This README is for a first-time contributor who just cloned the repo and wants t
 ## What You Need
 
 1. Node.js 18+ (Node.js 20 LTS recommended)
-2. npm 
+2. npm
 3. Git
 4. Android Studio (for Android emulator flow)
 5. JDK 17 (required for Android build toolchain)
@@ -75,14 +75,12 @@ Tip: this is automatic if you run `npm run setup:local`.
 
 ```dotenv
 EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://us-central1-your_project_id.cloudfunctions.net
+EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://threatlens-register.YOUR_SUBDOMAIN.workers.dev
 EXPO_PUBLIC_TRUST_REGISTRY_API_KEY=your_registry_api_key
 EXPO_PUBLIC_MASTER_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 ```
 
-For backend deployment details (`/register` + `/verify`, Firestore, cert setup), see [cloud-function/README.md](cloud-function/README.md).
-
-Automated setup scripts are available in [scripts/setup](scripts/setup).
+For backend deployment details, see [workers/README.md](workers/README.md).
 
 If you change `.env`, restart Metro with cache clear:
 
@@ -229,4 +227,4 @@ Already configured in `app.json` with `scheme: threatlens`.
 
 1. Never commit `.env`.
 2. If any API key is exposed, rotate it immediately.
-3. Never commit `master_private.pem`; store it in Google Secret Manager only.
+3. Never commit `master_private.pem`; store it in Cloudflare Workers secrets only.

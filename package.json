@@ -7,8 +7,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "setup:local": "pwsh -ExecutionPolicy Bypass -File ./scripts/setup/bootstrap-local.ps1 -InstallDependencies -UseGeneratedConfig",
-    "setup:cloud": "pwsh -ExecutionPolicy Bypass -File ./scripts/setup/deploy-trust-registry.ps1"
+    "setup:local": "pwsh -ExecutionPolicy Bypass -File ./scripts/setup/bootstrap-local.ps1 -InstallDependencies -UseGeneratedConfig"
   },
   "dependencies": {
     "@expo-google-fonts/dm-sans": "^0.4.2",
