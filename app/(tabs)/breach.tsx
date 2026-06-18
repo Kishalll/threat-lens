@@ -161,7 +161,7 @@ export default function BreachScreen() {
     const progressById: Record<string, BreachActionProgress> = {};
 
     for (const breach of breachStore.breaches) {
-      const storedGuidance = parseStoredGuidance(breach.geminiGuidance);
+      const storedGuidance = parseStoredGuidance(breach.aiGuidance);
       const hasGuidance = Boolean(storedGuidance);
       const requiredActionsCount =
         storedGuidance && !storedGuidance.isFallback ? storedGuidance.actionItems.length : 0;

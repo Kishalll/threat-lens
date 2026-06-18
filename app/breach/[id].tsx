@@ -62,8 +62,8 @@ export default function BreachDetailScreen() {
     [breachSuggestions]
   );
   const storedGuidance = useMemo(
-    () => parseStoredGuidance(breach?.geminiGuidance),
-    [breach?.geminiGuidance]
+    () => parseStoredGuidance(breach?.aiGuidance),
+    [breach?.aiGuidance]
   );
   const breachId = breach?.id;
   const isFetchingRef = useRef(false);
@@ -130,7 +130,7 @@ export default function BreachDetailScreen() {
         }
 
         const nextBreach = useBreachStore.getState().breaches.find((item) => item.id === breachId);
-        const nextGuidance = parseStoredGuidance(nextBreach?.geminiGuidance);
+        const nextGuidance = parseStoredGuidance(nextBreach?.aiGuidance);
         setGuidance(nextGuidance);
       })
       .catch((error) => {

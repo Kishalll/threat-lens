@@ -44,10 +44,10 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
       return {
         ...breach,
         resolved: Boolean(previous.resolved),
-        geminiGuidance:
-          typeof previous.geminiGuidance === "string" && previous.geminiGuidance.trim().length > 0
-            ? previous.geminiGuidance
-            : breach.geminiGuidance,
+        aiGuidance:
+          typeof previous.aiGuidance === "string" && previous.aiGuidance.trim().length > 0
+            ? previous.aiGuidance
+            : breach.aiGuidance,
       };
     });
     

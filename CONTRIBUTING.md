@@ -48,7 +48,7 @@ This creates `.env` from `.env.example` and runs `npm install`.
 Fill in the missing values in `.env`:
 
 ```dotenv
-EXPO_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
+EXPO_PUBLIC_NIM_API_KEY=your_nvidia_nim_api_key
 EXPO_PUBLIC_TRUST_REGISTRY_BASE_URL=https://threatlens-register.YOUR_SUBDOMAIN.workers.dev
 EXPO_PUBLIC_TRUST_REGISTRY_API_KEY=your_registry_api_key
 EXPO_PUBLIC_MASTER_PUBLIC_KEY_PEM="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
@@ -146,7 +146,7 @@ Outputs a download link. The `.env` values are baked in at build time — tester
 
 ### ToDos
 
-- [ ] replace gemini w nim models
+- [x] replace gemini w nim models
 - [ ] tune model wrt indian scams
 - [ ] remove keys in img config tab
 - [ ] add concel btn to cancel and revert img protect

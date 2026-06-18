@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS breaches (
   dataTypes TEXT NOT NULL,
   severity TEXT NOT NULL,
   seen INTEGER DEFAULT 0,
-  geminiGuidance TEXT
+  aiGuidance TEXT
 );
 `;
 

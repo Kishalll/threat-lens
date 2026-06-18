@@ -10,7 +10,7 @@ import {
   type StoredCredential,
 } from "../services/storageService";
 import { sendLocalNotification } from "../services/notificationService";
-import { generateBreachGuidance } from "../services/geminiService";
+import { generateBreachGuidance } from "../services/nimService";
 import { useDashboardStore } from "./dashboardStore";
 
 // Type mapping for credentials
@@ -108,10 +108,10 @@ function applyPersistedBreachFields(
     return {
       ...breach,
       resolved: Boolean(previous.resolved),
-      geminiGuidance:
-        typeof previous.geminiGuidance === "string" && previous.geminiGuidance.trim().length > 0
-          ? previous.geminiGuidance
-          : breach.geminiGuidance,
+      aiGuidance:
+        typeof previous.aiGuidance === "string" && previous.aiGuidance.trim().length > 0
+          ? previous.aiGuidance
+          : breach.aiGuidance,
     };
   });
 }
@@ -163,7 +163,7 @@ function parseStoredGuidance(
 }
 
 function deriveResolvedOnHydration(breach: BreachApiItem): boolean {
-  const guidance = parseStoredGuidance(breach.geminiGuidance ?? undefined);
+  const guidance = parseStoredGuidance(breach.aiGuidance ?? undefined);
 
   // Without persisted per-action completion state, be conservative on startup.
   // A breach is considered resolved at hydration only when guidance exists and
@@ -332,7 +332,7 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
 
       const serializedGuidance = JSON.stringify(guidance);
       const breaches = state.breaches.map((breach) =>
-        breach.id === id ? { ...breach, geminiGuidance: serializedGuidance } : breach
+        breach.id === id ? { ...breach, aiGuidance: serializedGuidance } : breach
       );
 
       persistBreachCacheAsync(breaches);
@@ -350,7 +350,7 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
       return;
     }
 
-    const cachedGuidance = parseStoredGuidance(breach.geminiGuidance ?? undefined);
+    const cachedGuidance = parseStoredGuidance(breach.aiGuidance ?? undefined);
     if (cachedGuidance) {
       return;
     }

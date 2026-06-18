@@ -48,14 +48,14 @@ When you verify an image, the app runs four checks in order:
 
 ### Message Threat Scanner
 
-Scans text messages, links, or anything suspicious for scams, phishing, and spam using Gemini AI.
+Scans text messages, links, or anything suspicious for scams, phishing, and spam using NVIDIA NIM AI.
 
 Three ways to scan:
 - **Automatic** — grant notification access and the app reads incoming messages from WhatsApp, SMS, Telegram, Gmail, and other messaging apps in the background. If a threat is detected, you get an alert notification instantly
 - **Paste** — copy any message and paste it directly into the scanner
 - **Share** — share text from any app directly into ThreatLens using Android's share sheet
 
-Classifies as `SAFE`, `SPAM`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing). Automatically falls back across multiple Gemini model versions if one is rate-limited.
+Classifies as `SAFE`, `SPAM`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing). Multilingual — understands Hindi, Bengali, Tamil, Telugu, Marathi, and other major Indian languages. Falls back to a secondary NIM model if the primary is rate-limited.
 
 ---
 
@@ -65,7 +65,7 @@ Checks if your email or username has appeared in known data breaches.
 
 - Uses two sources: XposedOrNot and LeakCheck
 - Shows which breach, when it happened, and what data was exposed
-- Generates AI-powered recovery guidance via Gemini for each breach
+- Generates AI-powered recovery guidance via NVIDIA NIM for each breach
 - Background alerts notify you when new breaches are detected
 
 ---

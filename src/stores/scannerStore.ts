@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { ScanResult } from "../types";
-import { classifyMessage } from "../services/geminiService";
+import { classifyMessage } from "../services/nimService";
 import { useDashboardStore } from "./dashboardStore";
 
 export interface ScannerState {

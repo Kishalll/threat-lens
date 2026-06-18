@@ -13,7 +13,7 @@ export interface BreachRecord {
   dataTypes: string[];
   severity: "low" | "medium" | "high" | "critical";
   seen: boolean;
-  geminiGuidance?: string;
+  aiGuidance?: string;
 }
 
 export interface BreachGuidance {
