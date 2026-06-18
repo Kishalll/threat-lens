@@ -36,7 +36,7 @@ function parseStoredGuidance(value?: string): { actionItems: string[]; isFallbac
 const ALL_FILTER = "__ALL__";
 const BREACH_PAGE_SIZE = 10;
 const AUTO_COLLAPSE_MS = 45_000;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const EMAIL_REGEX = /^[^\s@]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,63}$/;
 
 type BreachActionProgress = {
   totalSuggestions: number;

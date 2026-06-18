@@ -423,8 +423,15 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
 
       const itemsToScan = get().credentials.map((c) => c.value);
       const results = await checkAllCredentials(itemsToScan);
+
+      // Drop results for credentials deleted while the scan was running
+      const currentValues = new Set(get().credentials.map((c) => c.value));
+      const activeResults = results.filter(
+        (b) => !b.matchedCredential || currentValues.has(b.matchedCredential)
+      );
+
       const sortedResults = applyPersistedBreachFields(
-        applyResolvedState(sortBreachesNewestFirst(results), resolvedById),
+        applyResolvedState(sortBreachesNewestFirst(activeResults), resolvedById),
         previousById
       );
       const newBreaches = sortedResults.filter((breach) => !previousIds.has(breach.id));
