@@ -1,14 +1,23 @@
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { getKey } from "./secureKeyService";
 import type { BreachGuidance, ScanResult } from "../types";
 
-const GEMINI_MODEL_CANDIDATES = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-  "gemini-flash-latest",
+// ---------------------------------------------------------------------------
+// Model configuration
+// ---------------------------------------------------------------------------
+
+// Scanner: needs strong multilingual + Indian-context classification accuracy
+const SCANNER_MODELS = [
+  "meta/llama-3.3-70b-instruct",            // primary — best multilingual instruction following
+  "nv-mistralai/mistral-nemo-12b-instruct", // fallback
+];
+
+// Breach guidance: longer-form generation, lower latency preferable
+const BREACH_MODELS = [
+  "meta/llama-3.1-8b-instruct",             // primary — fast, sufficient for guidance text
+  "nv-mistralai/mistral-nemo-12b-instruct", // fallback
 ];
 
 const MODEL_BACKOFF_DEFAULT_MS = 60_000;
@@ -16,14 +25,31 @@ const MODEL_BACKOFF_DAILY_QUOTA_MS = 6 * 60 * 60 * 1000;
 const MODEL_UNAVAILABLE_BACKOFF_MS = 24 * 60 * 60 * 1000;
 const modelCooldownUntil = new Map<string, number>();
 
-const GEMINI_SYSTEM_PROMPT = `SYSTEM: You are a cybersecurity expert specialising in consumer fraud detection. Focus on the Indian context (UPI scams, OTP fraud, KYC phishing).
+// ---------------------------------------------------------------------------
+// System prompts
+// ---------------------------------------------------------------------------
 
-Respond ONLY with valid JSON — no markdown, no text outside the JSON object.
+const SCANNER_SYSTEM_PROMPT = `You are a cybersecurity expert specialising in consumer fraud detection for the Indian market.
+
+You understand scam and phishing patterns common in India including:
+- UPI payment scams (fake UPI IDs, payment pending tricks, refund frauds)
+- OTP theft (impersonating banks, telecom operators, TRAI, NPCI, government portals)
+- KYC phishing (fake bank/wallet/Jio/Airtel KYC expiry messages)
+- Fake prize, lottery, or cashback offers
+- Job offer scams and part-time work-from-home fraud
+- Loan app harassment and fake loan approval scams
+- Impersonation of government agencies (UIDAI, Income Tax, EPFO, police)
+- WhatsApp-based investment fraud and "doubling money" scams
+- Parcel/customs scam calls and smishing
+
+You can read and understand all major Indian languages: Hindi, Bengali, Tamil, Telugu, Marathi, Kannada, Gujarati, Malayalam, Punjabi, Odia, and Hinglish (mixed Hindi-English). Classify the message regardless of which language it is in.
 
 Classification policy:
-- SAFE for normal personal conversation (greetings, friendly invitations, casual chat) with no clear threat indicators.
-- Do not label a message as SCAM/PHISHING without concrete indicators like credential theft attempt, OTP request, account verification pressure, suspicious links/domains, payment demand, or impersonation urgency.
-- Messages such as "hi", "hello", "come to play", "are you free", "let's meet" are usually SAFE unless combined with malicious indicators.
+- SAFE for normal personal conversation (greetings, friendly invitations, casual chat) with no threat indicators.
+- Do not label a message SCAM or PHISHING without concrete indicators: credential theft attempt, OTP request, account verification pressure, suspicious links, payment demand, or impersonation urgency.
+- SPAM for unsolicited promotional content with no active threat.
+
+Respond ONLY with valid JSON — no markdown, no text outside the JSON object.
 
 Schema:
 {
@@ -33,6 +59,21 @@ Schema:
   "red_flags": ["specific suspicious elements"],
   "suggested_actions": ["actionable steps"]
 }`;
+
+const BREACH_SYSTEM_PROMPT = `You are a cybersecurity assistant helping users recover from data breaches.
+Respond ONLY with valid JSON — no markdown, no text outside the JSON object.
+
+Schema:
+{
+  "summary": "1-2 short plain English sentences about the breach impact",
+  "action_items": ["short actionable step", "short actionable step", "short actionable step"]
+}
+
+Rules: keep summary separate from action items. Use plain English. Prefer concrete steps the user can do right now.`;
+
+// ---------------------------------------------------------------------------
+// Guardrail patterns
+// ---------------------------------------------------------------------------
 
 const SUSPICIOUS_SIGNAL_PATTERNS: RegExp[] = [
   /https?:\/\//i,
@@ -54,68 +95,48 @@ const CASUAL_SAFE_PATTERNS: RegExp[] = [
   /^good\s+(morning|afternoon|evening|night)[!.\s]*$/i,
 ];
 
-async function getGeminiClient() {
-  // 1. Try to get key from process.env (Loaded from your .env file)
-  let apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+// ---------------------------------------------------------------------------
+// NIM client
+// ---------------------------------------------------------------------------
 
-  // 2. Fallback to SecureStore if not in env
+async function getNIMClient(): Promise<OpenAI> {
+  let apiKey = process.env.EXPO_PUBLIC_NIM_API_KEY;
+  if (!apiKey) apiKey = (await getKey("NIM_API_KEY")) ?? undefined;
   if (!apiKey) {
-    apiKey = await getKey("GEMINI_API_KEY");
+    throw new Error("NIM_API_KEY not found. Please add EXPO_PUBLIC_NIM_API_KEY to your .env file.");
   }
-
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY not found. Please add EXPO_PUBLIC_GEMINI_API_KEY to your .env file.");
-  }
-
-  return new GoogleGenerativeAI(apiKey);
+  return new OpenAI({
+    baseURL: "https://integrate.api.nvidia.com/v1",
+    apiKey,
+    dangerouslyAllowBrowser: true,
+  });
 }
 
-function isModelUnavailableError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
+// ---------------------------------------------------------------------------
+// Error helpers
+// ---------------------------------------------------------------------------
 
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("404") ||
-    message.includes("is not found") ||
-    message.includes("not supported for generatecontent")
-  );
+function isModelUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const m = error.message.toLowerCase();
+  return m.includes("404") || m.includes("is not found") || m.includes("not supported");
 }
 
 function isQuotaOrRateLimitError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
+  if (!(error instanceof Error)) return false;
+  const m = error.message.toLowerCase();
   return (
-    message.includes("429") ||
-    message.includes("quota exceeded") ||
-    message.includes("rate limit") ||
-    message.includes("rate-limited") ||
-    message.includes("temporarily rate-limited") ||
-    message.includes("high demand") ||
-    message.includes("overloaded") ||
-    message.includes("service unavailable") ||
-    message.includes("unavailable") ||
-    message.includes("503") ||
-    message.includes("retry in")
+    m.includes("429") || m.includes("quota") || m.includes("rate limit") ||
+    m.includes("rate-limit") || m.includes("overloaded") || m.includes("503") ||
+    m.includes("service unavailable") || m.includes("unavailable")
   );
 }
 
 function isCompromisedOrInvalidKeyError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("api key was reported as leaked") ||
-    message.includes("invalid api key") ||
-    message.includes("permission denied") ||
-    message.includes("403")
-  );
+  if (!(error instanceof Error)) return false;
+  const m = error.message.toLowerCase();
+  return m.includes("invalid api key") || m.includes("permission denied") ||
+    m.includes("401") || m.includes("403");
 }
 
 function canTryNextModel(error: unknown): boolean {
@@ -123,245 +144,182 @@ function canTryNextModel(error: unknown): boolean {
 }
 
 function extractRetryAfterMs(message: string): number {
-  const retryInMatch = message.match(/retry in\s+([\d.]+)s/i);
-  if (retryInMatch?.[1]) {
-    const seconds = Number(retryInMatch[1]);
-    if (!Number.isNaN(seconds) && seconds > 0) {
-      return Math.ceil(seconds * 1000);
-    }
+  const match = message.match(/retry in\s+([\d.]+)s/i) ??
+                message.match(/retry[_\-\s]?after[:\s]+([\d.]+)/i);
+  if (match?.[1]) {
+    const seconds = Number(match[1]);
+    if (!Number.isNaN(seconds) && seconds > 0) return Math.ceil(seconds * 1000);
   }
-
-  const retryDelayMatch = message.match(/retrydelay\":\"([\d.]+)s/i);
-  if (retryDelayMatch?.[1]) {
-    const seconds = Number(retryDelayMatch[1]);
-    if (!Number.isNaN(seconds) && seconds > 0) {
-      return Math.ceil(seconds * 1000);
-    }
-  }
-
   return 0;
 }
 
-function isDailyModelQuotaError(message: string): boolean {
-  return /generaterequestsperdayperprojectpermodel/i.test(message);
-}
-
 function applyModelBackoff(modelName: string, error: unknown): void {
-  if (!(error instanceof Error)) {
-    return;
-  }
-
-  const rawMessage = error.message;
-  const retryAfterMs = extractRetryAfterMs(rawMessage);
+  if (!(error instanceof Error)) return;
+  const retryAfterMs = extractRetryAfterMs(error.message);
+  const isDailyQuota = /daily|per.?day/i.test(error.message);
   const backoffMs = isModelUnavailableError(error)
     ? MODEL_UNAVAILABLE_BACKOFF_MS
-    : isDailyModelQuotaError(rawMessage)
+    : isDailyQuota
       ? Math.max(retryAfterMs, MODEL_BACKOFF_DAILY_QUOTA_MS)
       : Math.max(retryAfterMs, MODEL_BACKOFF_DEFAULT_MS);
-
   modelCooldownUntil.set(modelName, Date.now() + backoffMs);
 }
 
-function getCandidateModelsByAvailability(): string[] {
+function getAvailableModels(candidates: string[]): string[] {
   const now = Date.now();
-
-  return [...GEMINI_MODEL_CANDIDATES].sort((a, b) => {
-    const aReadyAt = modelCooldownUntil.get(a) ?? 0;
-    const bReadyAt = modelCooldownUntil.get(b) ?? 0;
-    const aIsReady = aReadyAt <= now ? 0 : 1;
-    const bIsReady = bReadyAt <= now ? 0 : 1;
-
-    if (aIsReady !== bIsReady) {
-      return aIsReady - bIsReady;
-    }
-
-    return aReadyAt - bReadyAt;
+  return [...candidates].sort((a, b) => {
+    const aReady = (modelCooldownUntil.get(a) ?? 0) <= now ? 0 : 1;
+    const bReady = (modelCooldownUntil.get(b) ?? 0) <= now ? 0 : 1;
+    if (aReady !== bReady) return aReady - bReady;
+    return (modelCooldownUntil.get(a) ?? 0) - (modelCooldownUntil.get(b) ?? 0);
   });
 }
 
-function getClassifyFallbackExplanation(error: unknown): string {
-  if (isCompromisedOrInvalidKeyError(error)) {
-    return "Gemini API key is invalid or flagged. Set a new EXPO_PUBLIC_GEMINI_API_KEY and restart the app.";
-  }
-  if (isQuotaOrRateLimitError(error)) {
-    return "AI quota exceeded right now. Please retry shortly or update your Gemini API key/billing.";
-  }
-  return "Unable to analyse message at this time.";
-}
+// ---------------------------------------------------------------------------
+// Core generation
+// ---------------------------------------------------------------------------
 
-function getBreachFallbackGuidance(error: unknown): BreachGuidance {
-  if (isCompromisedOrInvalidKeyError(error)) {
-    return {
-      summary: "AI guidance is unavailable because the Gemini API key is invalid or flagged.",
-      actionItems: [
-        "Add a new API key and restart the app",
-        "Change passwords for affected accounts",
-        "Enable 2FA and monitor suspicious logins",
-      ],
-      isFallback: true,
-    };
-  }
-  if (isQuotaOrRateLimitError(error)) {
-    return {
-      summary: "AI guidance is temporarily unavailable because Gemini is rate limited or out of quota.",
-      actionItems: [
-        "Change passwords for affected accounts",
-        "Enable 2FA",
-        "Watch for phishing attempts",
-      ],
-      isFallback: true,
-    };
-  }
-  return {
-    summary: "Review the affected account, change credentials, and monitor for suspicious activity.",
-    actionItems: ["Change passwords for affected accounts", "Enable 2FA", "Watch for phishing attempts"],
-    isFallback: true,
-  };
-}
-
-function normalizeGuidanceItems(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-}
-
-function fallbackGuidanceFromText(text: string, isFallback: boolean): BreachGuidance {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
-    .filter((line) => line.length > 0);
-
-  const [summaryLine, ...actionLines] = lines;
-
-  return {
-    summary:
-      summaryLine ??
-      "Review the affected account, change credentials, and monitor for suspicious activity.",
-    actionItems:
-      actionLines.length > 0
-        ? actionLines
-        : ["Change passwords for affected accounts", "Enable 2FA", "Watch for phishing attempts"],
-    isFallback,
-  };
-}
-
-function normalizeClassification(value: unknown): ScanResult["classification"] {
-  if (value === "SAFE" || value === "SPAM" || value === "SCAM" || value === "PHISHING") {
-    return value;
-  }
-  return "SAFE";
-}
-
-function normalizeConfidence(value: unknown): number {
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) {
-    return 0;
-  }
-  if (numeric < 0) {
-    return 0;
-  }
-  if (numeric > 100) {
-    return 100;
-  }
-  return numeric;
-}
-
-function extractJsonCandidate(rawText: string): string {
-  const trimmed = rawText.trim();
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch && fencedMatch[1]) {
-    return fencedMatch[1].trim();
-  }
-
-  const firstBrace = trimmed.indexOf("{");
-  const lastBrace = trimmed.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1).trim();
-  }
-
-  // Remove common wrapper characters (e.g., accidental leading backticks/quotes)
-  return trimmed.replace(/^[`'"\uFEFF\s]+|[`'"\s]+$/g, "").trim();
-}
-
-function parseGeminiJsonResponse(rawText: string): {
-  classification?: unknown;
-  confidence?: unknown;
-  explanation?: unknown;
-  red_flags?: unknown;
-  redFlags?: unknown;
-  suggested_actions?: unknown;
-  suggestedActions?: unknown;
-} {
-  const candidates = [rawText.trim(), extractJsonCandidate(rawText)];
-
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as {
-          classification?: unknown;
-          confidence?: unknown;
-          explanation?: unknown;
-          red_flags?: unknown;
-          redFlags?: unknown;
-          suggested_actions?: unknown;
-          suggestedActions?: unknown;
-        };
-      }
-    } catch {
-      // Try next candidate.
-    }
-  }
-
-  throw new SyntaxError("Unable to parse valid JSON object from Gemini response");
-}
-
-async function generateWithGemini(prompt: string): Promise<string> {
-  const genAI = await getGeminiClient();
+async function generateWithNIM(
+  systemPrompt: string,
+  userContent: string,
+  candidates: string[],
+  maxTokens: number,
+): Promise<string> {
+  const client = await getNIMClient();
   let lastError: unknown = null;
+  let skipped = 0;
   const now = Date.now();
-  let skippedDueToCooldown = 0;
 
-  for (const modelName of getCandidateModelsByAvailability()) {
-    const readyAt = modelCooldownUntil.get(modelName) ?? 0;
-    if (readyAt > now) {
-      skippedDueToCooldown += 1;
-      continue;
-    }
-
+  for (const model of getAvailableModels(candidates)) {
+    if ((modelCooldownUntil.get(model) ?? 0) > now) { skipped++; continue; }
     try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      return result.response.text();
+      const resp = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ],
+        temperature: 0.1,
+        top_p: 0.7,
+        max_tokens: maxTokens,
+      });
+      return resp.choices[0]?.message?.content ?? "";
     } catch (error) {
       lastError = error;
-      applyModelBackoff(modelName, error);
-      if (canTryNextModel(error)) {
-        continue;
-      }
+      applyModelBackoff(model, error);
+      if (canTryNextModel(error)) continue;
       throw error;
     }
   }
 
-  if (lastError == null && skippedDueToCooldown > 0) {
-    throw new Error("All Gemini models are temporarily rate-limited. Please retry shortly.");
+  if (lastError == null && skipped > 0) {
+    throw new Error("All NIM models are temporarily rate-limited. Please retry shortly.");
+  }
+  if (lastError instanceof Error) throw lastError;
+  throw new Error("No NIM model available.");
+}
+
+// ---------------------------------------------------------------------------
+// JSON parsing
+// ---------------------------------------------------------------------------
+
+function extractJsonCandidate(rawText: string): string {
+  const trimmed = rawText.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first !== -1 && last > first) return trimmed.slice(first, last + 1).trim();
+  return trimmed.replace(/^[`'"\uFEFF\s]+|[`'"\s]+$/g, "").trim();
+}
+
+function parseNIMJsonResponse(rawText: string): Record<string, unknown> {
+  for (const candidate of [rawText.trim(), extractJsonCandidate(rawText)]) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch { /* try next */ }
+  }
+  throw new SyntaxError("Unable to parse valid JSON from NIM response");
+}
+
+// ---------------------------------------------------------------------------
+// Normalizers
+// ---------------------------------------------------------------------------
+
+function normalizeClassification(value: unknown): ScanResult["classification"] {
+  if (value === "SAFE" || value === "SPAM" || value === "SCAM" || value === "PHISHING") return value;
+  return "SAFE";
+}
+
+function normalizeConfidence(value: unknown): number {
+  const n = Number(value);
+  if (Number.isNaN(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+function normalizeGuidanceItems(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[])
+    .filter((i): i is string => typeof i === "string")
+    .map((i) => i.trim())
+    .filter((i) => i.length > 0);
+}
+
+function normalizeMessageText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+// ---------------------------------------------------------------------------
+// Guardrails
+// ---------------------------------------------------------------------------
+
+function countSuspiciousSignals(text: string): number {
+  return SUSPICIOUS_SIGNAL_PATTERNS.filter((p) => p.test(text)).length;
+}
+
+function isLikelyCasualSafeMessage(text: string): boolean {
+  const normalized = normalizeMessageText(text);
+  if (!normalized || normalized.split(" ").filter(Boolean).length > 7) return false;
+  return CASUAL_SAFE_PATTERNS.some((p) => p.test(normalized));
+}
+
+function applyClassificationGuardrails(text: string, result: ScanResult): ScanResult {
+  const normalized = normalizeMessageText(text);
+  const signals = countSuspiciousSignals(normalized);
+  const casual = isLikelyCasualSafeMessage(normalized);
+
+  if (casual && signals === 0 && result.classification !== "SAFE") {
+    return {
+      ...result,
+      classification: "SAFE",
+      confidence: Math.max(75, result.confidence),
+      redFlags: [],
+      explanation: "Likely normal conversation with no clear scam indicators.",
+      suggestedActions: ["No immediate action needed."],
+    };
   }
 
-  if (lastError instanceof Error) {
-    throw lastError;
+  if (signals === 0 && (result.classification === "SCAM" || result.classification === "PHISHING")) {
+    return {
+      ...result,
+      classification: "SPAM",
+      confidence: Math.min(result.confidence, 55),
+      redFlags: [],
+      explanation: "No strong phishing or scam signals detected.",
+      suggestedActions: ["Treat with caution only if sender is unknown."],
+    };
   }
-  throw new Error("No supported Gemini model is available for generateContent.");
+
+  return result;
 }
+
+// ---------------------------------------------------------------------------
+// Fallbacks
+// ---------------------------------------------------------------------------
 
 function fallbackScanResult(text: string, explanation: string): ScanResult {
   return {
@@ -376,87 +334,73 @@ function fallbackScanResult(text: string, explanation: string): ScanResult {
   };
 }
 
-function normalizeMessageText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
+function getClassifyFallbackExplanation(error: unknown): string {
+  if (isCompromisedOrInvalidKeyError(error)) {
+    return "NIM API key is invalid. Set a new EXPO_PUBLIC_NIM_API_KEY and restart the app.";
+  }
+  if (isQuotaOrRateLimitError(error)) {
+    return "AI quota exceeded right now. Please retry shortly.";
+  }
+  return "Unable to analyse message at this time.";
 }
 
-function countSuspiciousSignals(text: string): number {
-  let count = 0;
-  for (const pattern of SUSPICIOUS_SIGNAL_PATTERNS) {
-    if (pattern.test(text)) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
-function isLikelyCasualSafeMessage(text: string): boolean {
-  const normalized = normalizeMessageText(text);
-  if (!normalized) {
-    return false;
-  }
-
-  const wordCount = normalized.split(" ").filter(Boolean).length;
-  if (wordCount > 7) {
-    return false;
-  }
-
-  return CASUAL_SAFE_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
-function applyClassificationGuardrails(text: string, result: ScanResult): ScanResult {
-  const normalizedText = normalizeMessageText(text);
-  const suspiciousSignals = countSuspiciousSignals(normalizedText);
-  const casualSafe = isLikelyCasualSafeMessage(normalizedText);
-
-  // Guardrail: short, casual chat with zero threat indicators should not be flagged.
-  if (casualSafe && suspiciousSignals === 0 && result.classification !== "SAFE") {
+function getBreachFallbackGuidance(error: unknown): BreachGuidance {
+  if (isCompromisedOrInvalidKeyError(error)) {
     return {
-      ...result,
-      classification: "SAFE",
-      confidence: Math.max(75, result.confidence),
-      redFlags: [],
-      explanation: "Likely normal conversation with no clear scam indicators.",
-      suggestedActions: ["No immediate action needed."],
+      summary: "AI guidance unavailable — NIM API key is invalid.",
+      actionItems: ["Add a valid API key and restart", "Change passwords for affected accounts", "Enable 2FA"],
+      isFallback: true,
     };
   }
-
-  // Guardrail: avoid high-severity labels when no scam signals are present.
-  if (
-    suspiciousSignals === 0 &&
-    (result.classification === "SCAM" || result.classification === "PHISHING")
-  ) {
-    return {
-      ...result,
-      classification: "SPAM",
-      confidence: Math.min(result.confidence, 55),
-      redFlags: [],
-      explanation: "No strong phishing or scam signals were detected in this message.",
-      suggestedActions: ["Treat with caution only if sender is unknown."],
-    };
-  }
-
-  return result;
+  return {
+    summary: "Review the affected account, change credentials, and monitor for suspicious activity.",
+    actionItems: ["Change passwords for affected accounts", "Enable 2FA", "Watch for phishing attempts"],
+    isFallback: true,
+  };
 }
+
+function fallbackGuidanceFromText(text: string, isFallback: boolean): BreachGuidance {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(/^[-*]\s+/, ""))
+    .filter((l) => l.length > 0);
+  const [summaryLine, ...actionLines] = lines;
+  return {
+    summary: summaryLine ?? "Review the affected account, change credentials, and monitor for suspicious activity.",
+    actionItems: actionLines.length > 0 ? actionLines : ["Change passwords", "Enable 2FA", "Watch for phishing"],
+    isFallback,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export async function classifyMessage(text: string): Promise<ScanResult> {
   try {
-    // Explicitly ask for JSON Output within the prompt and settings if possible
-    const prompt = `${GEMINI_SYSTEM_PROMPT}\n\nUSER Message to Analyse:\n${text}`;
-    const responseText = await generateWithGemini(prompt);
+    const responseText = await generateWithNIM(
+      SCANNER_SYSTEM_PROMPT,
+      `Message to classify:\n${text}`,
+      SCANNER_MODELS,
+      400, // JSON response is small; 400 tokens is well within free tier per-call budget
+    );
 
-    const parsed = parseGeminiJsonResponse(responseText);
-    const parsedRedFlags = parsed.red_flags ?? parsed.redFlags;
-    const parsedSuggestedActions = parsed.suggested_actions ?? parsed.suggestedActions;
-    
+    const parsed = parseNIMJsonResponse(responseText);
+    const redFlags = parsed.red_flags ?? parsed.redFlags;
+    const suggestedActions = parsed.suggested_actions ?? parsed.suggestedActions;
+
     const aiResult: ScanResult = {
       id: uuidv4(),
       timestamp: Date.now(),
       classification: normalizeClassification(parsed.classification),
       confidence: normalizeConfidence(parsed.confidence),
       messagePreview: text.slice(0, 100),
-      redFlags: Array.isArray(parsedRedFlags) ? parsedRedFlags.filter((v) => typeof v === "string") : [],
-      suggestedActions: Array.isArray(parsedSuggestedActions) ? parsedSuggestedActions.filter((v) => typeof v === "string") : [],
+      redFlags: Array.isArray(redFlags)
+        ? (redFlags as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
+      suggestedActions: Array.isArray(suggestedActions)
+        ? (suggestedActions as unknown[]).filter((v): v is string => typeof v === "string")
+        : [],
       explanation: typeof parsed.explanation === "string" ? parsed.explanation : "No explanation provided.",
     };
 
@@ -464,49 +408,23 @@ export async function classifyMessage(text: string): Promise<ScanResult> {
   } catch (error) {
     if (isCompromisedOrInvalidKeyError(error) || isQuotaOrRateLimitError(error) || isModelUnavailableError(error)) {
       console.warn("classifyMessage degraded", error);
-      const reason = getClassifyFallbackExplanation(error);
-      return fallbackScanResult(text, reason);
-    } else {
-      console.error("classifyMessage failed", error);
-      throw error;
+      return fallbackScanResult(text, getClassifyFallbackExplanation(error));
     }
+    console.error("classifyMessage failed", error);
+    throw error;
   }
-}
-
-export async function classifyWithRetry(text: string, retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await classifyMessage(text);
-    } catch (err: any) {
-      if (err?.message?.includes("503")) {
-        console.log("🔁 Retrying Gemini...");
-        await new Promise(res => setTimeout(res, 2000));
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  throw new Error("Failed after retries");
 }
 
 export async function generateBreachGuidance(breachMetadata: object): Promise<BreachGuidance> {
   try {
-    const prompt = `You are a cybersecurity assistant. The user's information was found in a data breach with these details: ${JSON.stringify(breachMetadata)}.
+    const responseText = await generateWithNIM(
+      BREACH_SYSTEM_PROMPT,
+      `Breach details: ${JSON.stringify(breachMetadata)}`,
+      BREACH_MODELS,
+      300, // summary + 3 action items fits well within 300 tokens
+    );
 
-Respond ONLY with valid JSON matching this schema:
-{
-  "summary": "1-2 short plain English sentences",
-  "action_items": ["short actionable step", "short actionable step", "short actionable step"]
-}
-
-Rules:
-- Keep the summary separate from the action items.
-- Use plain English. No markdown, no code fences, no extra keys.
-- Prefer concrete recovery steps that the user can actually do now.`;
-
-    const responseText = await generateWithGemini(prompt);
-    const parsed = parseGeminiJsonResponse(responseText) as {
+    const parsed = parseNIMJsonResponse(responseText) as {
       summary?: unknown;
       action_items?: unknown;
       actionItems?: unknown;
@@ -516,11 +434,7 @@ Rules:
     const actionItems = normalizeGuidanceItems(parsed.action_items ?? parsed.actionItems);
 
     if (summary.length > 0 && actionItems.length > 0) {
-      return {
-        summary,
-        actionItems,
-        isFallback: false,
-      };
+      return { summary, actionItems, isFallback: false };
     }
 
     return fallbackGuidanceFromText(responseText, false);
@@ -529,7 +443,6 @@ Rules:
       console.warn("generateBreachGuidance degraded", error);
       return getBreachFallbackGuidance(error);
     }
-
     console.error("generateBreachGuidance failed", error);
     throw error;
   }

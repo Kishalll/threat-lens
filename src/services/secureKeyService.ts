@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-export const GEMINI_KEY_NAME = "GEMINI_API_KEY";
+export const NIM_KEY_NAME = "NIM_API_KEY";
 export const TRUST_REGISTRY_BASE_URL_KEY_NAME = "THREATLENS_TRUST_REGISTRY_BASE_URL";
 export const TRUST_REGISTRY_API_KEY_NAME = "THREATLENS_TRUST_REGISTRY_API_KEY";
 export const MASTER_PUBLIC_KEY_PEM_KEY_NAME = "THREATLENS_MASTER_PUBLIC_KEY_PEM";
@@ -28,10 +28,10 @@ export async function setKey(key: string, value: string): Promise<void> {
 }
 
 export async function getKey(key: string): Promise<string | null> {
-  if (key === GEMINI_KEY_NAME) {
-    const envGemini = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-    if (typeof envGemini === "string" && envGemini.trim().length > 0) {
-      return envGemini.trim();
+  if (key === NIM_KEY_NAME) {
+    const envNim = process.env.EXPO_PUBLIC_NIM_API_KEY;
+    if (typeof envNim === "string" && envNim.trim().length > 0) {
+      return envNim.trim();
     }
   }
 
@@ -125,6 +125,6 @@ export async function getVerifyEndpointUrl(): Promise<string | null> {
 
 // Ensure defaults for mock environment
 export async function initializeMockKeys() {
-  // Intentionally no mocked Gemini key. Set EXPO_PUBLIC_GEMINI_API_KEY
-  // or store GEMINI_API_KEY securely via setKey.
+  // Intentionally no mocked NIM key. Set EXPO_PUBLIC_NIM_API_KEY
+  // or store NIM_API_KEY securely via setKey.
 }
