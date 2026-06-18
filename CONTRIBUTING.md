@@ -151,6 +151,6 @@ Outputs a download link. The `.env` values are baked in at build time — tester
 - [ ] remove keys in img config tab
 - [ ] add concel btn to cancel and revert img protect
 - [ ] improve text ui
-- [ ] add an app settings menu w btn on top right - own api key, themes, notif interception toggle
+- [ ] add an app settings menu w btn on top right - own api key, themes, notif interception toggle, app laguage(ai responds in mentioned lang)
 - [ ] add app logo
 
