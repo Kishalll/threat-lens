@@ -101,11 +101,15 @@ function calculateScoreFromState(
     "activeBreachesCount" | "protectedImagesCount" | "scannedMessages" | "suggestions"
   >
 ): number {
+  const hasPendingActions = state.suggestions.some(
+    (s) => !s.isFallback && !s.acted
+  );
   return calculateSafetyScore({
     activeBreachesCount: state.activeBreachesCount,
     protectedImagesCount: state.protectedImagesCount,
     scannedMessages: state.scannedMessages,
     breachActionProgress: getBreachActionProgressFromSuggestions(state.suggestions),
+    hasPendingActions,
   });
 }
 
@@ -409,7 +413,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
 
   refreshScore: () => {
     const s = get();
-    const score = calculateScoreFromState(s);
+    const scannedMessages = getScannedMessagesFromState(s);
+    const score = calculateScoreFromState({ ...s, scannedMessages });
     set({ SafetyScore: score, ScoreColor: getScoreColor(score) });
   },
 }));

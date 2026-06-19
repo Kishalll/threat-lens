@@ -13,6 +13,7 @@ export interface ScoreInputs {
     resolvedBreachEquivalent?: number;
     pendingBreachCount?: number;
   };
+  hasPendingActions?: boolean;
 }
 
 export interface ScannedMessage {
@@ -113,6 +114,10 @@ export function calculateSafetyScore(inputs: ScoreInputs): number {
   );
 
   if (activeBreachesCount > 0) {
+    score = Math.min(score, 99);
+  }
+
+  if (inputs.hasPendingActions) {
     score = Math.min(score, 99);
   }
 

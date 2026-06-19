@@ -1,11 +1,9 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
-  AppState,
-  AppStateStatus,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
@@ -15,7 +13,6 @@ import { THEME } from "../../src/constants/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const refreshScore = useDashboardStore((state) => state.refreshScore);
   const safetyScore = useDashboardStore((state) => state.SafetyScore);
   const activeBreachesCount = useDashboardStore((state) => state.activeBreachesCount);
   const scannedMessages = useDashboardStore((state) => state.scannedMessages);
@@ -58,26 +55,6 @@ export default function HomeScreen() {
       ).length,
     [suggestions]
   );
-
-  useEffect(() => {
-    // Refresh score if needed on mount
-    refreshScore();
-
-    // Foreground app state listener simulation as per PRD
-    const subscription = AppState.addEventListener(
-      "change",
-      (nextAppState: AppStateStatus) => {
-        if (nextAppState === "active") {
-          // Trigger updates, background scans, etc.
-          refreshScore();
-        }
-      }
-    );
-
-    return () => {
-      subscription.remove();
-    };
-  }, [refreshScore]);
 
   const timeAgo = (timestamp: number) => {
     const diff = Math.floor((Date.now() - timestamp) / 60000);
