@@ -73,7 +73,6 @@ npx expo start -c
 ```bash
 npx expo run:android --device
 ```
-
 4. Start the dev server:
 
 ```bash

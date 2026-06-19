@@ -77,6 +77,7 @@ export default function ScannerScreen() {
   const getStatusColor = (classification: string) => {
     switch (classification) {
       case "SAFE": return THEME.colors.accent;
+      case "PROMO": return "#7BA7D0";
       case "SPAM": return THEME.colors.warning;
       case "SCAM": return THEME.colors.danger;
       case "PHISHING": return THEME.colors.danger;
@@ -88,6 +89,7 @@ export default function ScannerScreen() {
   const getStatusIcon = (classification: string) => {
     switch (classification) {
       case "SAFE": return "shield";
+      case "PROMO": return "tag";
       case "SPAM": return "info";
       case "SCAM": return "alert-triangle";
       case "PHISHING": return "alert-octagon";
