@@ -46,7 +46,9 @@ You can read and understand all major Indian languages: Hindi, Bengali, Tamil, T
 
 Classification policy:
 - SAFE for normal personal conversation (greetings, friendly invitations, casual chat) with no threat indicators.
-- Do not label a message SCAM or PHISHING without concrete indicators: credential theft attempt, OTP request, account verification pressure, suspicious links, payment demand, or impersonation urgency.
+- SAFE for standard bank/card transaction alerts: messages that notify of a debit or credit with a specific amount, masked card or account number, merchant name, and a timestamp — and do NOT ask for OTP, PIN, CVV, password, KYC verification, or account reactivation. Generic informational footers such as "click here for service charges and fees" or "for more details visit our website" do not make a transaction alert unsafe.
+- PHISHING if a message uses transaction alert formatting (amount, card number, bank name) but also requests credentials, OTP, KYC, or creates urgency to click a link to "verify", "reactivate", or "confirm" the transaction.
+- Do not label a message SCAM or PHISHING without concrete indicators: credential theft attempt, OTP request, account verification pressure, suspicious links with urgency, payment demand, or impersonation urgency.
 - SPAM for unsolicited promotional content with no active threat.
 
 Respond ONLY with valid JSON — no markdown, no text outside the JSON object.
@@ -298,8 +300,8 @@ function applyClassificationGuardrails(text: string, result: ScanResult): ScanRe
       classification: "SAFE",
       confidence: Math.max(75, result.confidence),
       redFlags: [],
+      suggestedActions: [],
       explanation: "Likely normal conversation with no clear scam indicators.",
-      suggestedActions: ["No immediate action needed."],
     };
   }
 
@@ -312,6 +314,10 @@ function applyClassificationGuardrails(text: string, result: ScanResult): ScanRe
       explanation: "No strong phishing or scam signals detected.",
       suggestedActions: ["Treat with caution only if sender is unknown."],
     };
+  }
+
+  if (result.classification === "SAFE") {
+    return { ...result, redFlags: [], suggestedActions: [] };
   }
 
   return result;

@@ -23,6 +23,10 @@ import { THEME } from "../src/constants/theme";
 
 const DEBUG = false;
 
+// Register the native notification listener as early as possible — before React
+// mounts — so no events are missed during the initial render cycle.
+initializeNotificationInterceptor();
+
 export default function RootLayout() {
   if (__DEV__) {
     LogBox.ignoreLogs(["Unable to activate keep awake"]);
@@ -107,9 +111,8 @@ export default function RootLayout() {
     // 🔥 1. Ask notification permission
     void requestNotificationPermissions();
 
-    // 🔥 2. Background + interceptor (optional future use)
+    // 🔥 2. Background tasks
     void registerBackgroundFetchTasks();
-    initializeNotificationInterceptor();
 
     // 🔥 3. Notification tap actions
     const notificationResponseSubscription =
