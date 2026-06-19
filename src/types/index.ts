@@ -25,7 +25,7 @@ export interface BreachGuidance {
 export interface ScanResult {
   id: string;
   timestamp: number;
-  classification: "SAFE" | "SPAM" | "SCAM" | "PHISHING" | "UNAVAILABLE";
+  classification: "SAFE" | "PROMO" | "SPAM" | "SCAM" | "PHISHING" | "UNAVAILABLE";
   confidence: number;
   messagePreview: string;
   redFlags: string[];

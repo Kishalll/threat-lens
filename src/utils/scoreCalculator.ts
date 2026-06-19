@@ -3,7 +3,7 @@ export interface ScoreInputs {
   protectedImagesCount: number;
   scannedMessages: {
     id: string;
-    riskType: "SAFE" | "SCAM" | "PHISHING" | "SPAM";
+    riskType: "SAFE" | "PROMO" | "SCAM" | "PHISHING" | "SPAM";
     totalSuggestions: number;
     actedSuggestions: number;
   }[];
@@ -17,7 +17,7 @@ export interface ScoreInputs {
 
 export interface ScannedMessage {
   id: string;
-  riskType: "SAFE" | "SCAM" | "PHISHING" | "SPAM";
+  riskType: "SAFE" | "PROMO" | "SCAM" | "PHISHING" | "SPAM";
   totalSuggestions: number;
   actedSuggestions: number;
 }
@@ -39,6 +39,7 @@ function getRiskPenalty(type: RiskType): number {
       return 5;
     case "SPAM":
       return 2;
+    case "PROMO":
     case "SAFE":
       return 0;
   }
