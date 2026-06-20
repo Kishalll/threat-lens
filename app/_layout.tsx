@@ -23,10 +23,6 @@ import { THEME } from "../src/constants/theme";
 
 const DEBUG = false;
 
-// Register the native notification listener as early as possible — before React
-// mounts — so no events are missed during the initial render cycle.
-initializeNotificationInterceptor();
-
 export default function RootLayout() {
   if (__DEV__) {
     LogBox.ignoreLogs(["Unable to activate keep awake"]);
@@ -40,6 +36,8 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
+    // Initialize here — inside useEffect — so the native bridge is fully ready.
+    initializeNotificationInterceptor();
     const handleNotificationTap = async (
       response: Notifications.NotificationResponse | null
     ) => {
@@ -69,7 +67,7 @@ export default function RootLayout() {
         return;
       }
 
-      if (data.type !== "THREAT_ALERT") {
+      if (data.type !== "THREAT_ALERT" && data.type !== "PROMO_ALERT") {
         return;
       }
 

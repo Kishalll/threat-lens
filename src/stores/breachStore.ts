@@ -163,16 +163,7 @@ function parseStoredGuidance(
 }
 
 function deriveResolvedOnHydration(breach: BreachApiItem): boolean {
-  const guidance = parseStoredGuidance(breach.aiGuidance ?? undefined);
-
-  // Without persisted per-action completion state, be conservative on startup.
-  // A breach is considered resolved at hydration only when guidance exists and
-  // there are no required action items.
-  if (!guidance || guidance.isFallback) {
-    return false;
-  }
-
-  return guidance.actionItems.length === 0;
+  return Boolean(breach.resolved);
 }
 
 export const useBreachStore = create<BreachState>()((set, get) => ({

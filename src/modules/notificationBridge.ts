@@ -1,16 +1,18 @@
 import { NativeModules, NativeEventEmitter, Platform } from "react-native";
 import { sendLocalNotification } from "../services/notificationService";
+import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
 
 // Get the native module
 const { NotificationModule } = NativeModules;
 
-// Create event emitter
-export const notificationEmitter = NotificationModule 
-  ? new NativeEventEmitter(NotificationModule)
-  : null;
+// Exported as a mutable ref — assigned inside initializeNotificationInterceptor()
+// so NativeEventEmitter is constructed after the native bridge is ready,
+// not at module parse time.
+export let notificationEmitter: NativeEventEmitter | null = null;
 
 const DANGEROUS_CLASSIFICATIONS = new Set(["SPAM", "SCAM", "PHISHING"]);
+const PROMO_CLASSIFICATION = "PROMO";
 let interceptorRegistered = false;
 
 const ALLOWED_MESSAGING_PACKAGES = new Set([
@@ -402,7 +404,7 @@ function isScanCancelledError(message: string): boolean {
  * Initializes the React Native listener that intercepts events from the Kotlin NotificationService
  */
 export function initializeNotificationInterceptor() {
-  if (Platform.OS !== "android" || !notificationEmitter) {
+  if (Platform.OS !== "android" || !NotificationModule) {
     console.warn("Notification interceptor is only supported on Android or NativeModule not found.");
     return;
   }
@@ -411,11 +413,20 @@ export function initializeNotificationInterceptor() {
     return;
   }
 
+  // Create the emitter here, not at module load time, so the native bridge
+  // is fully initialized before NativeEventEmitter tries to validate the module.
+  try {
+    notificationEmitter = new NativeEventEmitter(NotificationModule);
+  } catch (e) {
+    console.warn("Failed to create NativeEventEmitter for NotificationModule", e);
+    return;
+  }
+
   interceptorRegistered = true;
 
   console.log("Initializing React Native Notification Interceptor");
 
-  notificationEmitter.addListener("NotificationReceived", async (event: NativeNotificationEvent) => {
+  notificationEmitter!.addListener("NotificationReceived", async (event: NativeNotificationEvent) => {
     const packageName = typeof event.packageName === "string" ? event.packageName : "unknown-app";
     const title = typeof event.title === "string" ? event.title : "";
     const text = typeof event.text === "string" ? event.text : "";
@@ -441,17 +452,34 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
-      if (useScannerStore.getState().isScanning) {
-        return;
-      }
-
       if (!shouldClassify(packageName, title, text, category, isOngoing)) {
         return;
       }
 
       console.log(`Intercepted notification from ${packageName}`);
 
-      const scanResult = await useScannerStore.getState().scanManualText(text);
+      // Classify directly — bypasses scanner store so background scans never
+      // conflict with or cancel an active manual scan in the UI.
+      const scanResult = await classifyMessage(text);
+
+      // Also record into scanner store history so it shows up in scan history.
+      useScannerStore.getState().recordBackgroundScan(scanResult);
+
+      if (scanResult.classification === PROMO_CLASSIFICATION) {
+        await sendLocalNotification(
+          "Promotional Message Detected",
+          `A promotional message was received from ${packageName}.`,
+          {
+            type: "PROMO_ALERT",
+            classification: scanResult.classification,
+            sourcePackage: packageName,
+            scanId: scanResult.id,
+            sourceText: text,
+            threatlensInternal: true,
+          }
+        );
+        return;
+      }
 
       if (!DANGEROUS_CLASSIFICATIONS.has(scanResult.classification)) {
         return;

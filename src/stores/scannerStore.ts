@@ -9,6 +9,7 @@ export interface ScannerState {
   activeScanRequestId: number;
   
   scanManualText: (text: string) => Promise<ScanResult>;
+  recordBackgroundScan: (result: ScanResult) => void;
   cancelScan: () => void;
   clearHistory: () => void;
 }
@@ -71,6 +72,22 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
       isScanning: false,
       activeScanRequestId: state.activeScanRequestId + 1,
     })),
+
+  recordBackgroundScan: (result: ScanResult) => {
+    set((state) => ({ history: [result, ...state.history] }));
+    const dash = useDashboardStore.getState();
+    if (result.classification !== "UNAVAILABLE") {
+      dash.recordScannedMessage({
+        id: result.id,
+        riskType: result.classification,
+        totalSuggestions: result.suggestedActions.length,
+        actedSuggestions: 0,
+      });
+    }
+    dash.registerSuggestions("scan", result.id, result.suggestedActions, {
+      isFallback: result.classification === "UNAVAILABLE",
+    });
+  },
 
   clearHistory: () => set({ history: [] })
 }));
