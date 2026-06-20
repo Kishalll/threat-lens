@@ -10,15 +10,15 @@ This is the core feature. It lets you cryptographically sign an image so anyone 
 
 **How it works:**
 
-When you first use the app, it generates a unique key pair (P-256 ECDSA) for your device and registers it with the trust registry backend (Cloudflare Workers + D1). The backend signs a certificate binding your device identity to your public key — similar to how HTTPS certificates work, but for devices.
+When you first use the app, it generates a unique key pair (P-256 ECDSA) for your device and registers it with the trust registry backend (Cloudflare Workers + D1). The backend signs a certificate binding your device identity to your public key - similar to how HTTPS certificates work, but for devices.
 
 **Protecting an image:**
 
 When you protect an image, the app:
 1. Computes a SHA-256 hash of the raw pixel data
-2. Computes a perceptual hash (dHash) — a fingerprint based on visual content
+2. Computes a perceptual hash (dHash) - a fingerprint based on visual content
 3. Signs all of this (plus your device identity, timestamp, certificate) with your private key
-4. Embeds the signed payload into the image's EXIF metadata — no visible change to the image
+4. Embeds the signed payload into the image's EXIF metadata - no visible change to the image
 
 The signed image looks identical. The proof is invisible, stored in the file itself.
 
@@ -38,7 +38,7 @@ When you verify an image, the app runs four checks in order:
 | Result | What it means | Real-life trigger |
 |---|---|---|
 | `AUTHENTIC` | All 4 checks passed | Image is exactly as captured, from a real trusted device |
-| `TAMPERED` | Pixel hash mismatch | Someone edited the image — cropped, filtered, face-swapped, or added text after signing |
+| `TAMPERED` | Pixel hash mismatch | Someone edited the image - cropped, filtered, face-swapped, or added text after signing |
 | `INVALID_SIGNATURE` | Crypto signature broken | Someone tampered with the EXIF payload itself, or built a fake one without a real private key |
 | `CLONE_APP` | Master cert invalid | Image was signed by a fake or modified version of the app, not a real install |
 | `REVOKED` | Device revoked in registry | Signing phone was stolen, compromised, or manually removed from the trust registry |
@@ -51,11 +51,11 @@ When you verify an image, the app runs four checks in order:
 Scans text messages, links, or anything suspicious for scams, phishing, and spam using NVIDIA NIM AI.
 
 Three ways to scan:
-- **Automatic** — grant notification access and the app reads incoming messages from WhatsApp, SMS, Telegram, Gmail, and other messaging apps in the background. If a threat is detected, you get an alert notification instantly
-- **Paste** — copy any message and paste it directly into the scanner
-- **Share** — share text from any app directly into ThreatLens using Android's share sheet
+- **Automatic** - grant notification access and the app reads incoming messages from WhatsApp, SMS, Telegram, Gmail, and other messaging apps in the background. If a threat is detected, you get an alert notification instantly
+- **Paste** - copy any message and paste it directly into the scanner
+- **Share** - share text from any app directly into ThreatLens using Android's share sheet
 
-Classifies as `SAFE`, `SPAM`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing). Multilingual — understands Hindi, Bengali, Tamil, Telugu, Marathi, and other major Indian languages. Falls back to a secondary NIM model if the primary is rate-limited.
+Classifies as `SAFE`, `PROMO`, `SPAM`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing). Multilingual - understands Hindi, Bengali, Tamil, Telugu, Marathi, and other major Indian languages. Falls back to a secondary NIM model if the primary is rate-limited.
 
 ---
 
@@ -78,13 +78,13 @@ A home screen dashboard gives you an at-a-glance safety score (0–100) calculat
 
 ## Install
 
-### Option 1 — Direct APK (Android)
+### Option 1 - Direct APK (Android)
 
 Download the latest APK from [Releases](../../releases) and install it on your Android device.
 
 Enable **Install unknown apps** if prompted.
 
-### Option 2 — Build from source
+### Option 2 - Build from source
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
