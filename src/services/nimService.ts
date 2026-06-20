@@ -116,6 +116,8 @@ const GENUINE_THREAT_PATTERNS: RegExp[] = [
   /kyc|verify\s+account|account\s+suspended|reactivate/i,
   /\bcvv\b|\bpin\b|\bpassword\b/i,
   /lottery|prize|winner|gift\s?card/i,
+  // Impersonation scam: urgency words + personal Indian mobile number
+  /\b(?:immediately|tonight|urgent|disconnect|blocked|arrested|legal\s*action)\b/i,
 ];
 
 // Patterns that identify a transactional alert (bank/UPI/institution payment notification)
@@ -445,7 +447,7 @@ function applyClassificationGuardrails(text: string, result: ScanResult): ScanRe
   }
 
   // 3. If no genuine threat patterns exist but LLM flagged SCAM/PHISHING,
-  //    downgrade to SPAM (soft disagreement with the model).
+  //    downgrade to SPAM but keep the LLM's original action items.
   if (threats === 0 && (result.classification === "SCAM" || result.classification === "PHISHING")) {
     return {
       ...result,
@@ -453,7 +455,9 @@ function applyClassificationGuardrails(text: string, result: ScanResult): ScanRe
       confidence: Math.min(result.confidence, 55),
       redFlags: [],
       explanation: "No strong phishing or scam signals detected.",
-      suggestedActions: ["Treat with caution only if sender is unknown."],
+      suggestedActions: result.suggestedActions.length > 0
+        ? result.suggestedActions
+        : ["Treat with caution if sender is unknown."],
     };
   }
 
