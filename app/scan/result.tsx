@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View, Text, ScrollView, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useScannerStore } from "../../src/stores/scannerStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
+import { getScanResult } from "../../src/services/storageService";
 import { THEME } from "../../src/constants/theme";
+import type { ScanResult } from "../../src/types";
 
 export default function ScanResultScreen() {
   const { index, id } = useLocalSearchParams<{ index?: string; id?: string }>();
@@ -13,11 +15,20 @@ export default function ScanResultScreen() {
   const suggestions = useDashboardStore((state) => state.suggestions);
   const registerSuggestions = useDashboardStore((state) => state.registerSuggestions);
   const markSuggestionAsDone = useDashboardStore((state) => state.markSuggestionAsDone);
-  
+  const [dbRecord, setDbRecord] = useState<ScanResult | null>(null);
+
   const parsedIndex = Number(index);
   const recordById = id ? scannerStore.history.find((item) => item.id === id) : undefined;
   const recordByIndex = Number.isInteger(parsedIndex) ? scannerStore.history[parsedIndex] : undefined;
-  const record = recordById ?? recordByIndex ?? scannerStore.history[0];
+  const record = recordById ?? recordByIndex ?? dbRecord ?? scannerStore.history[0];
+
+  // If not found in store, try SQLite (happens when opened from a notification tap after kill)
+  useEffect(() => {
+    if (!id || recordById) return;
+    getScanResult(id).then((result) => {
+      if (result) setDbRecord(result);
+    });
+  }, [id, recordById]);
   const trackedSuggestions = useMemo(
     () =>
       suggestions.filter(

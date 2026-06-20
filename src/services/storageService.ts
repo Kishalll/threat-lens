@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import type { BreachApiItem } from "./breachApiService";
+import type { ScanResult } from "../types";
 
 const DATABASE_NAME = "threatlens_secure.db";
 
@@ -217,4 +218,40 @@ export async function replaceCachedBreaches(breaches: BreachApiItem[]): Promise<
       }
     });
   });
+}
+
+export async function insertScanResult(result: ScanResult): Promise<void> {
+  await withDatabase(async (database) => {
+    await database.runAsync(
+      "INSERT OR REPLACE INTO scan_results (id, classification, confidence, messagePreview, timestamp, redFlags, suggestedActions, explanation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        result.id,
+        result.classification,
+        result.confidence,
+        result.messagePreview,
+        result.timestamp,
+        JSON.stringify(result.redFlags),
+        JSON.stringify(result.suggestedActions),
+        result.explanation,
+      ]
+    );
+  });
+}
+
+export async function getScanResult(id: string): Promise<ScanResult | null> {
+  const row = await withDatabase((database) =>
+    database.getFirstAsync("SELECT * FROM scan_results WHERE id = ?", [id])
+  );
+  if (!row) return null;
+  const r = row as Record<string, unknown>;
+  return {
+    id: r.id as string,
+    classification: r.classification as ScanResult["classification"],
+    confidence: r.confidence as number,
+    messagePreview: r.messagePreview as string,
+    timestamp: r.timestamp as number,
+    redFlags: JSON.parse(r.redFlags as string),
+    suggestedActions: JSON.parse(r.suggestedActions as string),
+    explanation: r.explanation as string,
+  };
 }

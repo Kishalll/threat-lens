@@ -17,7 +17,7 @@ import {
   notificationEmitter,
   openNotificationAccessSettings,
 } from "../src/modules/notificationBridge";
-import { requestNotificationPermissions } from "../src/services/notificationService";
+import { requestNotificationPermissions, setupNotificationChannel } from "../src/services/notificationService";
 import { useBreachStore } from "../src/stores/breachStore";
 import { THEME } from "../src/constants/theme";
 
@@ -108,6 +108,9 @@ export default function RootLayout() {
 
     // 🔥 1. Ask notification permission
     void requestNotificationPermissions();
+
+    // 🔥 1a. Set up high-importance channel (Android)
+    void setupNotificationChannel();
 
     // 🔥 2. Background tasks
     void registerBackgroundFetchTasks();

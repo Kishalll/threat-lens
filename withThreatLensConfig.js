@@ -32,6 +32,18 @@ function withThreatLensManifest(config) {
       });
     }
 
+    const hasHeadlessService = mainApplication.service.some(
+      s => s.$['android:name'] === '.HeadlessNotificationTaskService'
+    );
+    if (!hasHeadlessService) {
+      mainApplication.service.push({
+        $: {
+          'android:name': '.HeadlessNotificationTaskService',
+          'android:exported': 'false',
+        }
+      });
+    }
+
     // Add ACTION_SEND intent filter to MainActivity
     const mainActivity = mainApplication.activity.find(
       a => a.$['android:name'] === '.MainActivity'
@@ -97,6 +109,28 @@ function writeFileIfChanged(filePath, content) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
+function headlessTaskServiceSource(packageName) {
+  return `package ${packageName}
+
+import android.content.Intent
+import com.facebook.react.HeadlessJsTaskService
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.jstasks.HeadlessJsTaskConfig
+
+class HeadlessNotificationTaskService : HeadlessJsTaskService() {
+  override fun getTaskConfig(intent: Intent?): HeadlessJsTaskConfig? {
+    val extras = intent?.extras ?: return null
+    return HeadlessJsTaskConfig(
+      "ThreatLensNotificationTask",
+      Arguments.fromBundle(extras),
+      30_000L,
+      true
+    )
+  }
+}
+`;
+}
+
 function notificationServiceSource(packageName) {
   return `package ${packageName}
 
@@ -105,6 +139,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.work.Data
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
 
 class NotificationService : NotificationListenerService() {
 
@@ -131,6 +169,7 @@ class NotificationService : NotificationListenerService() {
     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
     val isTruncated = isLikelyTruncated(extras, messageText)
 
+    // Path 1: broadcast to dynamic receiver (works when app is alive)
     val intent = Intent(ACTION_NOTIFICATION_CAPTURED).apply {
       \`package\` = packageName
       putExtra(EXTRA_PACKAGE_NAME, sbn.packageName)
@@ -139,8 +178,27 @@ class NotificationService : NotificationListenerService() {
       putExtra(EXTRA_IS_TRUNCATED, isTruncated)
       putExtra(EXTRA_POSTED_AT, sbn.postTime)
     }
-
     sendBroadcast(intent)
+
+    // Path 2: WorkManager → HeadlessJS (works when app is backgrounded/killed)
+    try {
+      val inputData = Data.Builder()
+        .putString(EXTRA_PACKAGE_NAME, sbn.packageName)
+        .putString(EXTRA_TITLE, title)
+        .putString(EXTRA_TEXT, messageText)
+        .putBoolean(EXTRA_IS_TRUNCATED, isTruncated)
+        .putLong(EXTRA_POSTED_AT, sbn.postTime)
+        .build()
+
+      val request = OneTimeWorkRequestBuilder<NotificationWorker>()
+        .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+        .setInputData(inputData)
+        .build()
+
+      WorkManager.getInstance(applicationContext).enqueue(request)
+    } catch (_: Exception) {
+      // Broadcast above handles it when app is alive
+    }
   }
 
   private fun extractBestText(extras: Bundle): String {
@@ -181,11 +239,18 @@ class NotificationService : NotificationListenerService() {
 function notificationModuleSource(packageName) {
   return `package ${packageName}
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.BaseActivityEventListener
@@ -199,6 +264,7 @@ class NotificationModule(
   private val reactContext: ReactApplicationContext
 ) : ReactContextBaseJavaModule(reactContext) {
 
+  private val CHANNEL_ID = "threat-alerts"
   private var receiverRegistered = false
   private var lastSharedText: String? = null
 
@@ -272,6 +338,41 @@ class NotificationModule(
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
     reactContext.startActivity(intent)
+  }
+
+  @ReactMethod
+  fun showNotification(title: String, body: String, resultId: String) {
+    ensureChannel()
+    val tapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("threatlens://scan/result?id=$resultId")).apply {
+      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      setPackage(reactContext.packageName)
+    }
+    val pendingIntent = PendingIntent.getActivity(
+      reactContext, resultId.hashCode(), tapIntent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    val notification = NotificationCompat.Builder(reactContext, CHANNEL_ID)
+      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setContentTitle(title)
+      .setContentText(body)
+      .setPriority(NotificationCompat.PRIORITY_MAX)
+      .setContentIntent(pendingIntent)
+      .setAutoCancel(true)
+      .build()
+    NotificationManagerCompat.from(reactContext)
+      .notify(System.currentTimeMillis().toInt(), notification)
+  }
+
+  private fun ensureChannel() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val manager = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+    val channel = NotificationChannel(CHANNEL_ID, "Threat Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+      enableVibration(true)
+      vibrationPattern = longArrayOf(0, 250, 250, 250)
+      lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    }
+    manager.createNotificationChannel(channel)
   }
 
   @ReactMethod
@@ -395,6 +496,38 @@ class NotificationPackage : ReactPackage {
 `;
 }
 
+function notificationWorkerSource(packageName) {
+  return `package ${packageName}
+
+import android.content.Context
+import android.content.Intent
+import androidx.work.Worker
+import androidx.work.WorkerParameters
+import com.facebook.react.HeadlessJsTaskService
+
+class NotificationWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+  override fun doWork(): Result {
+    val packageName = inputData.getString(NotificationService.EXTRA_PACKAGE_NAME) ?: return Result.success()
+    val title = inputData.getString(NotificationService.EXTRA_TITLE).orEmpty()
+    val text = inputData.getString(NotificationService.EXTRA_TEXT).orEmpty()
+    val isTruncated = inputData.getBoolean(NotificationService.EXTRA_IS_TRUNCATED, false)
+    val postedAt = inputData.getLong(NotificationService.EXTRA_POSTED_AT, 0L)
+
+    val intent = Intent(applicationContext, HeadlessNotificationTaskService::class.java).apply {
+      putExtra(NotificationService.EXTRA_PACKAGE_NAME, packageName)
+      putExtra(NotificationService.EXTRA_TITLE, title)
+      putExtra(NotificationService.EXTRA_TEXT, text)
+      putExtra(NotificationService.EXTRA_IS_TRUNCATED, isTruncated)
+      putExtra(NotificationService.EXTRA_POSTED_AT, postedAt)
+    }
+    HeadlessJsTaskService.acquireWakeLockNow(applicationContext)
+    applicationContext.startService(intent)
+    return Result.success()
+  }
+}
+`;
+}
+
 function withThreatLensNativeFiles(config) {
   return withDangerousMod(config, ['android', async config => {
     const projectRoot = config.modRequest.projectRoot;
@@ -415,6 +548,14 @@ function withThreatLensNativeFiles(config) {
     writeFileIfChanged(
       path.join(javaDir, 'NotificationPackage.kt'),
       notificationPackageSource(packageName)
+    );
+    writeFileIfChanged(
+      path.join(javaDir, 'HeadlessNotificationTaskService.kt'),
+      headlessTaskServiceSource(packageName)
+    );
+    writeFileIfChanged(
+      path.join(javaDir, 'NotificationWorker.kt'),
+      notificationWorkerSource(packageName)
     );
 
     return config;
