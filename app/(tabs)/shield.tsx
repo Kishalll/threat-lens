@@ -40,6 +40,7 @@ import {
   setKey,
 } from "../../src/services/secureKeyService";
 import { THEME } from "../../src/constants/theme";
+import { log } from "../../src/utils/activityLog";
 
 type ShieldMode = "protect" | "verify" | "settings";
 type ProtectStep = "idle" | "picked" | "signing" | "done" | "error";
@@ -198,6 +199,8 @@ export default function ShieldScreen() {
       setProtectPayload(result.payload);
       setProtectStep("done");
 
+      log("img_protected", "Successfully signed image");
+
       useDashboardStore.getState().incrementProtectedImagesCount();
       await loadSettings();
     } catch (error) {
@@ -223,11 +226,19 @@ export default function ShieldScreen() {
         cloudCheck: verifyCloudCheck,
       });
       setVerifyResult(result);
+
+      if (result.status === "AUTHENTIC") {
+        log("img_verified", result.summary);
+      } else {
+        log("img_verify_fail", result.summary);
+      }
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
           : "Verification failed.";
+      
+      log("img_verify_fail", message);
       setErrorMessage(message);
       setVerifyResult(null);
     } finally {

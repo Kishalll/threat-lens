@@ -47,6 +47,9 @@ export async function sendLocalNotification(title: string, body: string, data?: 
       deepLink = ids.length === 1
         ? `threatlens://breach/${ids[0]}`
         : 'threatlens://breach';
+    } else if (data?.type === 'PASTE_FULL_NOTIFICATION_PROMPT') {
+      const capturedText = typeof data.capturedText === 'string' ? data.capturedText : '';
+      deepLink = `threatlens://scanner?prefill=${encodeURIComponent(capturedText)}`;
     }
     NativeModules.NotificationModule.showNotification(title, body, deepLink);
     return;

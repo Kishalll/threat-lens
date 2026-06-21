@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { ScanResult } from "../types";
 import { classifyMessage } from "../services/nimService";
 import { useDashboardStore } from "./dashboardStore";
+import { log } from "../utils/activityLog";
 
 export interface ScannerState {
   history: ScanResult[];
@@ -24,11 +25,13 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
     set({ isScanning: true, activeScanRequestId: requestId });
 
     try {
+      log("intercepted", `manual scan | "${text.slice(0, 60)}"`);
       const result = await classifyMessage(text);
 
       if (get().activeScanRequestId !== requestId) {
         throw new Error("Scan cancelled.");
       }
+      log("classified", `${result.classification} (${result.confidence}%) from manual scan`);
       
       set((state) => ({
         history: [result, ...state.history],
@@ -74,14 +77,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
     })),
 
   recordBackgroundScan: (result: ScanResult) => {
-    const DEDUP_WINDOW_MS = 120_000;
-    const now = Date.now();
-    const isDuplicate = useScannerStore.getState().history.some(
-      (r) =>
-        r.messagePreview === result.messagePreview &&
-        r.classification === result.classification &&
-        now - r.timestamp < DEDUP_WINDOW_MS
-    );
+    const isDuplicate = useScannerStore.getState().history.some((r) => r.id === result.id);
     if (isDuplicate) return;
     set((state) => ({ history: [result, ...state.history] }));
     const dash = useDashboardStore.getState();

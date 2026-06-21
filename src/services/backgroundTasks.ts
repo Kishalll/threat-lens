@@ -3,6 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { useBreachStore } from "../stores/breachStore";
 import { sendLocalNotification } from "./notificationService";
 import { checkAllCredentials } from "./breachApiService";
+import { log } from "../utils/activityLog";
 
 const BREACH_CHECK_TASK = "BACKGROUND_BREACH_CHECK";
 
@@ -26,6 +27,8 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
     if (credentials.length === 0) {
       return BackgroundTask.BackgroundTaskResult.Success;
     }
+
+    log("breach_check", `checking ${credentials.length} credentials...`);
 
     const itemsToCheck = credentials.map(c => c.value);
     
@@ -63,6 +66,8 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
           .map((breach) => breach.matchedCredential)
           .filter((value): value is string => typeof value === "string")
       );
+
+      log("breach_found", `${newBreaches.length} new breach(es) found`);
 
       // Fire local notification
       await sendLocalNotification(

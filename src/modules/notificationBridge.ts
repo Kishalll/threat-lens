@@ -2,6 +2,7 @@ import { NativeModules, NativeEventEmitter, Platform, AppState } from "react-nat
 import { sendLocalNotification } from "../services/notificationService";
 import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
+import { log } from "../utils/activityLog";
 
 // Get the native module
 const { NotificationModule } = NativeModules;
@@ -484,20 +485,54 @@ export function initializeNotificationInterceptor() {
     const isOngoing = event.isOngoing === true;
 
     try {
+      log("native_event", `${packageName} | title="${title}" | text="${text.slice(0, 60)}"`);
+
       if (!isLikelyMessagingPackage(packageName)) {
+        log("noise_filtered", `ignored package ${packageName}`);
         return;
       }
 
       if (isTruncated) {
         if (!shouldPromptForTruncated(packageName)) {
+          log("dedup_skip", `truncated prompt cooldown for ${packageName}`);
           return;
         }
-
+        log("paste_prompt", `truncated notif from ${packageName}`);
         await promptForFullMessage(packageName, title, text);
         return;
       }
 
       if (!hasReadableText(text)) {
+        log("noise_filtered", `empty text from ${packageName}`);
+        return;
+      }
+
+      if (isNoiseText(title, text)) {
+        log("noise_filtered", `${packageName} | "${text.slice(0, 60)}"`);
+        return;
+      }
+
+      if (isLikelySystemOrServiceNotification(category, isOngoing)) {
+        log("noise_filtered", `service/system notification from ${packageName}`);
+        return;
+      }
+
+      if (isLowSignalNotification(packageName, title, text)) {
+        log("low_signal", `${packageName} | "${text.slice(0, 60)}"`);
+        return;
+      }
+
+      const now = Date.now();
+      cleanupOldEntries(recentFingerprints, DUPLICATE_WINDOW_MS, now);
+      const fingerprint = `${packageName.toLowerCase()}::${normalizeText(text)}`;
+      const lastSeenAt = recentFingerprints.get(fingerprint);
+      if (typeof lastSeenAt === "number" && now - lastSeenAt < DUPLICATE_WINDOW_MS) {
+        log("dedup_skip", `${packageName} | "${text.slice(0, 60)}"`);
+        return;
+      }
+
+      if (now - lastClassificationAt < CLASSIFICATION_COOLDOWN_MS) {
+        log("dedup_skip", `cooldown active for ${packageName}`);
         return;
       }
 
@@ -505,11 +540,13 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
-      console.log(`Intercepted notification from ${packageName}`);
+      log("intercepted", `${packageName} | "${text.slice(0, 60)}"`);
 
       // Classify directly — bypasses scanner store so background scans never
       // conflict with or cancel an active manual scan in the UI.
       const scanResult = await classifyMessage(text);
+
+      log("classified", `${scanResult.classification} (${scanResult.confidence}%) from ${packageName}`);
 
       // Also record into scanner store history so it shows up in scan history.
       useScannerStore.getState().recordBackgroundScan(scanResult);
@@ -518,6 +555,7 @@ export function initializeNotificationInterceptor() {
       const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(scanResult))));
 
       if (scanResult.classification === PROMO_CLASSIFICATION) {
+        log("alert_sent", `PROMO from ${packageName}`);
         await sendLocalNotification(
           "Promotional Message Detected",
           `A promotional message was received from ${packageName}.`,
@@ -536,6 +574,7 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
+      log("alert_sent", `${scanResult.classification} from ${packageName}`);
       await sendLocalNotification(
         `Threat Alert: ${scanResult.classification}`,
         `Potential ${scanResult.classification.toLowerCase()} content detected from ${packageName}. Tap for full analysis.`,

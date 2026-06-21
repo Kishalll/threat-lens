@@ -29,7 +29,10 @@ const DATABASE_SCHEMA_SQL = `
     classification TEXT,
     confidence INTEGER,
     messagePreview TEXT,
-    timestamp INTEGER NOT NULL
+    timestamp INTEGER NOT NULL,
+    redFlags TEXT NOT NULL DEFAULT '[]',
+    suggestedActions TEXT NOT NULL DEFAULT '[]',
+    explanation TEXT NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS breach_cache (
@@ -59,6 +62,21 @@ function isInvalidDatabaseHandleError(error: unknown): boolean {
 async function openAndInitializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   const openedDb = await SQLite.openDatabaseAsync(DATABASE_NAME);
   await openedDb.execAsync(DATABASE_SCHEMA_SQL);
+  await openedDb.execAsync(`
+    ALTER TABLE scan_results ADD COLUMN redFlags TEXT NOT NULL DEFAULT '[]';
+  `).catch(() => {
+    // Column already exists on upgraded installs.
+  });
+  await openedDb.execAsync(`
+    ALTER TABLE scan_results ADD COLUMN suggestedActions TEXT NOT NULL DEFAULT '[]';
+  `).catch(() => {
+    // Column already exists on upgraded installs.
+  });
+  await openedDb.execAsync(`
+    ALTER TABLE scan_results ADD COLUMN explanation TEXT NOT NULL DEFAULT '';
+  `).catch(() => {
+    // Column already exists on upgraded installs.
+  });
   return openedDb;
 }
 
