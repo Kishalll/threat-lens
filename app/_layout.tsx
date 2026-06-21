@@ -171,7 +171,7 @@ export default function RootLayout() {
               await persistRecoveredScan(result);
               useScannerStore.getState().recordBackgroundScan(result);
             } catch {}
-            router.replace({ pathname: '/scan/result', params: { encodedResult } });
+            router.replace({ pathname: '/scan/result', params: { encodedResult, source: "notification" } });
             return;
           }
 

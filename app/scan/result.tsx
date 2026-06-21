@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View, Text, ScrollView, Pressable } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { BackHandler, StyleSheet, View, Text, ScrollView, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useScannerStore } from "../../src/stores/scannerStore";
@@ -9,7 +9,7 @@ import { THEME } from "../../src/constants/theme";
 import type { ScanResult } from "../../src/types";
 
 export default function ScanResultScreen() {
-  const { index, id, encodedResult } = useLocalSearchParams<{ index?: string; id?: string; encodedResult?: string }>();
+  const { index, id, encodedResult, source } = useLocalSearchParams<{ index?: string; id?: string; encodedResult?: string; source?: string }>();
   const router = useRouter();
   const scannerStore = useScannerStore();
   const suggestions = useDashboardStore((state) => state.suggestions);
@@ -31,6 +31,15 @@ export default function ScanResultScreen() {
   const recordById = id ? scannerStore.history.find((item) => item.id === id) : undefined;
   const recordByIndex = Number.isInteger(parsedIndex) ? scannerStore.history[parsedIndex] : undefined;
   const record = decodedRecord ?? recordById ?? recordByIndex ?? dbRecord ?? scannerStore.history[0];
+  const openedFromNotification = source === "notification";
+
+  const handleBackNavigation = useCallback(() => {
+    if (openedFromNotification) {
+      router.replace("/(tabs)/scanner");
+      return;
+    }
+    router.back();
+  }, [openedFromNotification, router]);
 
   // If not found anywhere else, try SQLite
   useEffect(() => {
@@ -39,6 +48,22 @@ export default function ScanResultScreen() {
       if (result) setDbRecord(result);
     });
   }, [id, recordById, decodedRecord]);
+
+  useEffect(() => {
+    if (!openedFromNotification) {
+      return;
+    }
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBackNavigation();
+      return true;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [handleBackNavigation, openedFromNotification]);
+
   const trackedSuggestions = useMemo(
     () =>
       suggestions.filter(
@@ -60,7 +85,7 @@ export default function ScanResultScreen() {
     return (
       <View style={styles.container}>
         <Text style={{color: "#E8E9EB"}}>Scan result not found.</Text>
-        <Pressable onPress={() => router.back()} style={{marginTop: 20}}><Text style={{color:"#4ADE80"}}>Go Back</Text></Pressable>
+        <Pressable onPress={handleBackNavigation} style={{marginTop: 20}}><Text style={{color:"#4ADE80"}}>Go Back</Text></Pressable>
       </View>
     );
   }
@@ -87,7 +112,7 @@ export default function ScanResultScreen() {
     : "shield";
   return (
     <ScrollView style={styles.container}>
-      <Pressable style={({ pressed }) => [styles.backHeader, pressed && styles.pressedButton]} onPress={() => router.back()}>
+      <Pressable style={({ pressed }) => [styles.backHeader, pressed && styles.pressedButton]} onPress={handleBackNavigation}>
         <Feather name="arrow-left" size={22} color={THEME.colors.textPrimary} />
         <Text style={styles.backTitle}>Back to Scanner</Text>
       </Pressable>

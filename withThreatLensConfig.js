@@ -161,6 +161,16 @@ class NotificationService : NotificationListenerService() {
 
     private const val DEDUP_WINDOW_MS = 120_000L
     private val recentFingerprints = mutableMapOf<String, Long>()
+    private val STACKED_MESSAGING_PACKAGES = setOf(
+      "com.whatsapp", "com.whatsapp.w4b", "com.google.android.apps.messaging",
+      "com.google.android.apps.googlevoice", "com.android.mms", "com.samsung.android.messaging",
+      "com.sonyericsson.conversations", "com.miui.smsextra", "com.oneplus.mms",
+      "com.oplus.message", "com.coloros.message", "com.vivo.messaging", "com.htc.sense.mms",
+      "com.huawei.message", "org.telegram.messenger", "org.telegram.plus",
+      "org.thoughtcrime.securesms", "com.facebook.orca", "com.instagram.android",
+      "com.discord", "jp.naver.line.android", "com.tencent.mm", "com.viber.voip",
+      "com.kakao.talk", "com.zing.zalo", "com.skype.raider", "com.microsoft.teams", "com.bbm"
+    )
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -173,7 +183,7 @@ class NotificationService : NotificationListenerService() {
     }
 
     val extras = sbn.notification.extras ?: Bundle.EMPTY
-    val messageText = extractBestText(extras)
+    val messageText = extractBestText(sbn.packageName, extras)
     val title = extractBestTitle(extras)
     val isTruncated = isLikelyTruncated(extras, messageText)
     val category = sbn.notification.category.orEmpty()
@@ -249,20 +259,24 @@ class NotificationService : NotificationListenerService() {
     Log.d(DEBUG_TAG, "[DEBUG-notif] listener disconnected")
   }
 
-  private fun extractBestText(extras: Bundle): String {
+  private fun extractBestText(sourcePackage: String, extras: Bundle): String {
     val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
     val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
     val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim().orEmpty()
+    val textLines = extractTextLines(extras)
+    val latestMessagingStyleText = extractLatestMessagingStyleText(extras)
+    val latestTextLine = textLines.lastOrNull().orEmpty()
 
-    val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
-      ?.mapNotNull { it?.toString()?.trim() }
-      ?.filter { it.isNotEmpty() }
-      ?.joinToString("\\n")
-      .orEmpty()
+    if (isLikelyStackedMessagingPackage(sourcePackage)) {
+      return listOf(latestMessagingStyleText, latestTextLine, text, bigText, subText)
+        .firstOrNull { it.isNotEmpty() }
+        .orEmpty()
+    }
 
-    val messagingStyleText = extractMessagingStyleText(extras)
+    val joinedLines = textLines.joinToString("\\n")
+    val messagingStyleText = extractAllMessagingStyleText(extras)
 
-    return listOf(messagingStyleText, bigText, lines, text, subText)
+    return listOf(messagingStyleText, bigText, joinedLines, text, subText)
       .filter { it.isNotEmpty() }
       .maxByOrNull { it.length }
       .orEmpty()
@@ -280,7 +294,35 @@ class NotificationService : NotificationListenerService() {
       .orEmpty()
   }
 
-  private fun extractMessagingStyleText(extras: Bundle): String {
+  private fun extractTextLines(extras: Bundle): List<String> {
+    return extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+      ?.mapNotNull { it?.toString()?.trim() }
+      ?.filter { it.isNotEmpty() }
+      .orEmpty()
+  }
+
+  private fun extractLatestMessagingStyleText(extras: Bundle): String {
+    return try {
+      val rawMessages = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        extras.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java)
+      } else {
+        @Suppress("DEPRECATION")
+        extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+      }
+
+      val messages = Notification.MessagingStyle.Message.getMessagesFromBundleArray(rawMessages)
+      messages
+        .lastOrNull { !it.text?.toString()?.trim().isNullOrEmpty() }
+        ?.text
+        ?.toString()
+        ?.trim()
+        .orEmpty()
+    } catch (_: Exception) {
+      ""
+    }
+  }
+
+  private fun extractAllMessagingStyleText(extras: Bundle): String {
     return try {
       val rawMessages = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
         extras.getParcelableArray(Notification.EXTRA_MESSAGES, Parcelable::class.java)
@@ -297,6 +339,12 @@ class NotificationService : NotificationListenerService() {
     } catch (_: Exception) {
       ""
     }
+  }
+
+  private fun isLikelyStackedMessagingPackage(sourcePackage: String): Boolean {
+    return STACKED_MESSAGING_PACKAGES.contains(sourcePackage) ||
+      sourcePackage.contains(".mms") ||
+      sourcePackage.endsWith(".sms")
   }
 
   private fun isLikelyTruncated(extras: Bundle, extractedText: String): Boolean {
