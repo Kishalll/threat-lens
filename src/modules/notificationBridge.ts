@@ -1,4 +1,4 @@
-import { NativeModules, NativeEventEmitter, Platform } from "react-native";
+import { NativeModules, NativeEventEmitter, Platform, AppState } from "react-native";
 import { sendLocalNotification } from "../services/notificationService";
 import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
@@ -427,6 +427,9 @@ export function initializeNotificationInterceptor() {
   console.log("Initializing React Native Notification Interceptor");
 
   notificationEmitter!.addListener("NotificationReceived", async (event: NativeNotificationEvent) => {
+    // Only handle in foreground — background/killed state is handled by WorkManager → HeadlessJS
+    if (AppState.currentState !== 'active') return;
+
     const packageName = typeof event.packageName === "string" ? event.packageName : "unknown-app";
     const title = typeof event.title === "string" ? event.title : "";
     const text = typeof event.text === "string" ? event.text : "";
@@ -465,6 +468,9 @@ export function initializeNotificationInterceptor() {
       // Also record into scanner store history so it shows up in scan history.
       useScannerStore.getState().recordBackgroundScan(scanResult);
 
+      // Encode result for deep link tap routing (same as headless path)
+      const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(scanResult))));
+
       if (scanResult.classification === PROMO_CLASSIFICATION) {
         await sendLocalNotification(
           "Promotional Message Detected",
@@ -473,8 +479,7 @@ export function initializeNotificationInterceptor() {
             type: "PROMO_ALERT",
             classification: scanResult.classification,
             sourcePackage: packageName,
-            scanId: scanResult.id,
-            sourceText: text,
+            encodedResult,
             threatlensInternal: true,
           }
         );
@@ -492,8 +497,7 @@ export function initializeNotificationInterceptor() {
           type: "THREAT_ALERT",
           classification: scanResult.classification,
           sourcePackage: packageName,
-          scanId: scanResult.id,
-          sourceText: text,
+          encodedResult,
           threatlensInternal: true,
         }
       );

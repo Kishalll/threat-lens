@@ -153,6 +153,9 @@ class NotificationService : NotificationListenerService() {
     const val EXTRA_TEXT = "text"
     const val EXTRA_IS_TRUNCATED = "isTruncated"
     const val EXTRA_POSTED_AT = "postedAt"
+
+    private const val DEDUP_WINDOW_MS = 120_000L
+    private val recentFingerprints = mutableMapOf<String, Long>()
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -168,6 +171,14 @@ class NotificationService : NotificationListenerService() {
     val messageText = extractBestText(extras)
     val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
     val isTruncated = isLikelyTruncated(extras, messageText)
+
+    val fingerprint = "\${sbn.packageName}::\${messageText.trim().lowercase()}"
+    val now = System.currentTimeMillis()
+    synchronized(recentFingerprints) {
+      recentFingerprints.entries.removeAll { now - it.value > DEDUP_WINDOW_MS }
+      if (recentFingerprints.containsKey(fingerprint)) return
+      recentFingerprints[fingerprint] = now
+    }
 
     // Path 1: broadcast to dynamic receiver (works when app is alive)
     val intent = Intent(ACTION_NOTIFICATION_CAPTURED).apply {
@@ -341,26 +352,27 @@ class NotificationModule(
   }
 
   @ReactMethod
-  fun showNotification(title: String, body: String, resultId: String) {
+  fun showNotification(title: String, body: String, deepLink: String) {
     ensureChannel()
-    val tapIntent = Intent(Intent.ACTION_VIEW, Uri.parse("threatlens://scan/result?id=$resultId")).apply {
-      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      setPackage(reactContext.packageName)
-    }
-    val pendingIntent = PendingIntent.getActivity(
-      reactContext, resultId.hashCode(), tapIntent,
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    val notification = NotificationCompat.Builder(reactContext, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(reactContext, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_dialog_info)
       .setContentTitle(title)
       .setContentText(body)
       .setPriority(NotificationCompat.PRIORITY_MAX)
-      .setContentIntent(pendingIntent)
       .setAutoCancel(true)
-      .build()
+    if (deepLink.isNotEmpty()) {
+      val tapIntent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        setPackage(reactContext.packageName)
+      }
+      val pendingIntent = PendingIntent.getActivity(
+        reactContext, deepLink.hashCode(), tapIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+      builder.setContentIntent(pendingIntent)
+    }
     NotificationManagerCompat.from(reactContext)
-      .notify(System.currentTimeMillis().toInt(), notification)
+      .notify(System.currentTimeMillis().toInt(), builder.build())
   }
 
   private fun ensureChannel() {

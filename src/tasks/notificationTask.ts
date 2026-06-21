@@ -1,6 +1,6 @@
 import { classifyMessage } from "../services/nimService";
 import { sendLocalNotification } from "../services/notificationService";
-import { insertScanResult } from "../services/storageService";
+import type { ScanResult } from "../types";
 
 const DANGEROUS = new Set(["SPAM", "SCAM", "PHISHING"]);
 
@@ -42,13 +42,14 @@ export default async function notificationTask(taskData: TaskData): Promise<void
     const result = await classifyMessage(text);
     if (result.classification === "UNAVAILABLE") return;
 
-    await insertScanResult(result);
+    // Encode result as base64 so the tap can decode it without SQLite
+    const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(result))));
 
     if (result.classification === "PROMO") {
       await sendLocalNotification(
         "Promotional Message Detected",
         `A promotional message was received from ${packageName}.`,
-        { type: "PROMO_ALERT", classification: result.classification, sourcePackage: packageName, resultId: result.id, threatlensInternal: true }
+        { type: "PROMO_ALERT", classification: result.classification, sourcePackage: packageName, encodedResult, threatlensInternal: true }
       );
       return;
     }
@@ -58,7 +59,7 @@ export default async function notificationTask(taskData: TaskData): Promise<void
     await sendLocalNotification(
       `Threat Alert: ${result.classification}`,
       `Potential ${result.classification.toLowerCase()} detected from ${packageName}. Tap for analysis.`,
-      { type: "THREAT_ALERT", classification: result.classification, sourcePackage: packageName, resultId: result.id, threatlensInternal: true }
+      { type: "THREAT_ALERT", classification: result.classification, sourcePackage: packageName, encodedResult, threatlensInternal: true }
     );
   } catch {
     // Silently fail — don't crash the headless task

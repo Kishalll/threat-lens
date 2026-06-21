@@ -9,7 +9,7 @@ import { THEME } from "../../src/constants/theme";
 import type { ScanResult } from "../../src/types";
 
 export default function ScanResultScreen() {
-  const { index, id } = useLocalSearchParams<{ index?: string; id?: string }>();
+  const { index, id, encodedResult } = useLocalSearchParams<{ index?: string; id?: string; encodedResult?: string }>();
   const router = useRouter();
   const scannerStore = useScannerStore();
   const suggestions = useDashboardStore((state) => state.suggestions);
@@ -17,18 +17,28 @@ export default function ScanResultScreen() {
   const markSuggestionAsDone = useDashboardStore((state) => state.markSuggestionAsDone);
   const [dbRecord, setDbRecord] = useState<ScanResult | null>(null);
 
+  // Decode result passed directly from notification tap (avoids SQLite in headless context)
+  const decodedRecord = useMemo<ScanResult | null>(() => {
+    if (!encodedResult) return null;
+    try {
+      return JSON.parse(decodeURIComponent(escape(atob(encodedResult)))) as ScanResult;
+    } catch {
+      return null;
+    }
+  }, [encodedResult]);
+
   const parsedIndex = Number(index);
   const recordById = id ? scannerStore.history.find((item) => item.id === id) : undefined;
   const recordByIndex = Number.isInteger(parsedIndex) ? scannerStore.history[parsedIndex] : undefined;
-  const record = recordById ?? recordByIndex ?? dbRecord ?? scannerStore.history[0];
+  const record = decodedRecord ?? recordById ?? recordByIndex ?? dbRecord ?? scannerStore.history[0];
 
-  // If not found in store, try SQLite (happens when opened from a notification tap after kill)
+  // If not found anywhere else, try SQLite
   useEffect(() => {
-    if (!id || recordById) return;
+    if (!id || recordById || decodedRecord) return;
     getScanResult(id).then((result) => {
       if (result) setDbRecord(result);
     });
-  }, [id, recordById]);
+  }, [id, recordById, decodedRecord]);
   const trackedSuggestions = useMemo(
     () =>
       suggestions.filter(

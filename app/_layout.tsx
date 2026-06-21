@@ -3,7 +3,6 @@ import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono";
 import { Stack, useRouter } from "expo-router";
 import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
-import * as Notifications from "expo-notifications";
 import { useEffect } from "react";
 import { Alert, LogBox, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -19,7 +18,9 @@ import {
 } from "../src/modules/notificationBridge";
 import { requestNotificationPermissions, setupNotificationChannel } from "../src/services/notificationService";
 import { useBreachStore } from "../src/stores/breachStore";
+import { useScannerStore } from "../src/stores/scannerStore";
 import { THEME } from "../src/constants/theme";
+import type { ScanResult } from "../src/types";
 
 const DEBUG = false;
 
@@ -38,53 +39,6 @@ export default function RootLayout() {
   useEffect(() => {
     // Initialize here — inside useEffect — so the native bridge is fully ready.
     initializeNotificationInterceptor();
-    const handleNotificationTap = async (
-      response: Notifications.NotificationResponse | null
-    ) => {
-      if (!response) {
-        return;
-      }
-
-      const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-      if (!data || typeof data.type !== "string") {
-        return;
-      }
-
-      if (data.type === "PASTE_FULL_NOTIFICATION_PROMPT") {
-        const capturedText = typeof data.capturedText === "string" ? data.capturedText : "";
-        router.push({ pathname: "/scanner", params: capturedText ? { prefill: capturedText } : undefined });
-        return;
-      }
-
-      if (data.type === "SCAN_RETRY_PROMPT") {
-        const sourceText = typeof data.sourceText === "string" ? data.sourceText : "";
-        router.push({ pathname: "/scanner", params: sourceText.trim() ? { prefill: sourceText } : undefined });
-        return;
-      }
-
-      if (data.type === "BREACH_ALERT") {
-        router.push("/(tabs)/breach");
-        return;
-      }
-
-      if (data.type !== "THREAT_ALERT" && data.type !== "PROMO_ALERT") {
-        return;
-      }
-
-      const scanId = typeof data.scanId === "string" ? data.scanId : "";
-      if (scanId) {
-        router.push({ pathname: "/scan/result", params: { id: scanId } });
-        return;
-      }
-
-      const sourceText = typeof data.sourceText === "string" ? data.sourceText : "";
-      if (!sourceText.trim()) {
-        router.push("/scanner");
-        return;
-      }
-
-      router.push({ pathname: "/scanner", params: { prefill: sourceText } });
-    };
 
     const checkNotificationAccess = async () => {
       if (Platform.OS !== "android") {
@@ -114,16 +68,6 @@ export default function RootLayout() {
 
     // 🔥 2. Background tasks
     void registerBackgroundFetchTasks();
-
-    // 🔥 3. Notification tap actions
-    const notificationResponseSubscription =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        void handleNotificationTap(response);
-      });
-
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      void handleNotificationTap(response);
-    });
 
     void checkNotificationAccess();
 
@@ -157,6 +101,30 @@ export default function RootLayout() {
       if (url) {
         try {
           const parsed = Linking.parse(url);
+          const fullPath = [parsed.hostname, parsed.path].filter(Boolean).join('/');
+
+          // Native scan alert tap: threatlens://scan/result?data=<base64>
+          if (fullPath === 'scan/result' && parsed.queryParams?.data) {
+            const encodedResult = parsed.queryParams.data as string;
+            try {
+              const result = JSON.parse(decodeURIComponent(escape(atob(encodedResult)))) as ScanResult;
+              useScannerStore.getState().recordBackgroundScan(result);
+            } catch {}
+            router.replace({ pathname: '/scan/result', params: { encodedResult } });
+            return;
+          }
+
+          // Native breach tap: threatlens://breach/<id> or threatlens://breach
+          if (parsed.hostname === 'breach') {
+            const breachId = parsed.path;
+            if (breachId) {
+              router.push({ pathname: '/breach/[id]', params: { id: breachId } });
+            } else {
+              router.push('/(tabs)/breach');
+            }
+            return;
+          }
+
           const textAttr =
             parsed.queryParams?.text ||
             parsed.queryParams?.["android.intent.extra.TEXT"];
@@ -168,7 +136,10 @@ export default function RootLayout() {
       }
     };
 
-    Linking.getInitialURL().then(handleUrl);
+    Linking.getInitialURL().then((url) => {
+      // Defer so expo-router's navigation container is ready before we push
+      setTimeout(() => handleUrl(url), 300);
+    });
     const linkingSubscription = Linking.addEventListener("url", ({ url }) =>
       handleUrl(url)
     );
@@ -198,7 +169,6 @@ export default function RootLayout() {
     // 🧹 CLEANUP
     return () => {
       linkingSubscription.remove();
-      notificationResponseSubscription.remove();
       sharedTextSubscription?.remove();
     };
   }, [router]);

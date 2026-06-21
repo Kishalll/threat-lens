@@ -39,8 +39,16 @@ export async function requestNotificationPermissions() {
 
 export async function sendLocalNotification(title: string, body: string, data?: Record<string, unknown>) {
   if (Platform.OS === 'android') {
-    const resultId = typeof data?.resultId === 'string' ? data.resultId : '';
-    NativeModules.NotificationModule.showNotification(title, body, resultId);
+    let deepLink = '';
+    if (typeof data?.encodedResult === 'string' && data.encodedResult) {
+      deepLink = `threatlens://scan/result?data=${encodeURIComponent(data.encodedResult)}`;
+    } else if (data?.type === 'BREACH_ALERT') {
+      const ids = Array.isArray(data.breachIds) ? data.breachIds : [];
+      deepLink = ids.length === 1
+        ? `threatlens://breach/${ids[0]}`
+        : 'threatlens://breach';
+    }
+    NativeModules.NotificationModule.showNotification(title, body, deepLink);
     return;
   }
   await Notifications.scheduleNotificationAsync({
