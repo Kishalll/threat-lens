@@ -1,16 +1,48 @@
 import { create } from "zustand";
-import { ScanResult } from "../types";
+import type { ScanResult } from "../types";
 import { classifyMessage } from "../services/nimService";
+import { createScanRepository, dedupeScanResults } from "../services/scanRepository";
+import { getAllScanResults, insertScanResult } from "../services/storageService";
 import { useDashboardStore } from "./dashboardStore";
 import { log } from "../utils/activityLog";
+
+const scanRepository = createScanRepository({
+  insertScanResult,
+  getAllScanResults,
+});
+
+function appendScanToHistory(history: ScanResult[], result: ScanResult): ScanResult[] {
+  return dedupeScanResults([result, ...history]);
+}
+
+function syncHistoryToDashboard(history: ScanResult[]): void {
+  useDashboardStore.getState().hydrateScanHistory(history);
+}
+
+function recordScanInDashboard(result: ScanResult): void {
+  const dash = useDashboardStore.getState();
+  if (result.classification !== "UNAVAILABLE") {
+    dash.recordScannedMessage({
+      id: result.id,
+      riskType: result.classification,
+      totalSuggestions: result.suggestedActions.length,
+      actedSuggestions: 0,
+    });
+  }
+
+  dash.registerSuggestions("scan", result.id, result.suggestedActions, {
+    isFallback: result.classification === "UNAVAILABLE",
+  });
+}
 
 export interface ScannerState {
   history: ScanResult[];
   isScanning: boolean;
   activeScanRequestId: number;
   
+  hydrateFromStorage: () => Promise<void>;
   scanManualText: (text: string) => Promise<ScanResult>;
-  recordBackgroundScan: (result: ScanResult) => void;
+  recordBackgroundScan: (result: ScanResult) => Promise<void>;
   cancelScan: () => void;
   clearHistory: () => void;
 }
@@ -19,6 +51,12 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
   history: [],
   isScanning: false,
   activeScanRequestId: 0,
+
+  hydrateFromStorage: async () => {
+    const history = await scanRepository.loadHistory();
+    set({ history });
+    syncHistoryToDashboard(history);
+  },
 
   scanManualText: async (text: string) => {
     const requestId = get().activeScanRequestId + 1;
@@ -32,30 +70,11 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
         throw new Error("Scan cancelled.");
       }
       log("classified", `${result.classification} (${result.confidence}%) from manual scan`);
-      
-      set((state) => ({
-        history: [result, ...state.history],
-        isScanning: false
-      }));
 
-      // Update Dashboard score metrics
-      const dash = useDashboardStore.getState();
-      if (result.classification !== "UNAVAILABLE") {
-        dash.recordScannedMessage({
-          id: result.id,
-          riskType: result.classification,
-          totalSuggestions: result.suggestedActions.length,
-          actedSuggestions: 0,
-        });
-      }
+      await scanRepository.save(result);
 
-      dash.updateDashboardData((state) => ({
-        lastUpdateTimestamp: state.lastUpdateTimestamp,
-      }));
-
-      dash.registerSuggestions("scan", result.id, result.suggestedActions, {
-        isFallback: result.classification === "UNAVAILABLE",
-      });
+      set((state) => ({ history: appendScanToHistory(state.history, result), isScanning: false }));
+      recordScanInDashboard(result);
 
       return result;
     } catch (error) {
@@ -76,22 +95,15 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
       activeScanRequestId: state.activeScanRequestId + 1,
     })),
 
-  recordBackgroundScan: (result: ScanResult) => {
-    const isDuplicate = useScannerStore.getState().history.some((r) => r.id === result.id);
-    if (isDuplicate) return;
-    set((state) => ({ history: [result, ...state.history] }));
-    const dash = useDashboardStore.getState();
-    if (result.classification !== "UNAVAILABLE") {
-      dash.recordScannedMessage({
-        id: result.id,
-        riskType: result.classification,
-        totalSuggestions: result.suggestedActions.length,
-        actedSuggestions: 0,
-      });
+  recordBackgroundScan: async (result: ScanResult) => {
+    const isDuplicate = get().history.some((record) => record.id === result.id);
+    if (isDuplicate) {
+      return;
     }
-    dash.registerSuggestions("scan", result.id, result.suggestedActions, {
-      isFallback: result.classification === "UNAVAILABLE",
-    });
+
+    await scanRepository.save(result);
+    set((state) => ({ history: appendScanToHistory(state.history, result) }));
+    recordScanInDashboard(result);
   },
 
   clearHistory: () => set({ history: [] })

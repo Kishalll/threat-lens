@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
-import { BreachApiItem, checkAllCredentials } from "../services/breachApiService";
+import { BreachApiItem } from "../services/breachApiService";
+import {
+  countActiveBreaches,
+  sortBreachesNewestFirst,
+} from "../services/breachPipeline";
+import { executeBreachScan } from "../services/breachDomainService";
 import {
   getCachedBreaches,
   getCredentials,
@@ -41,79 +46,12 @@ export interface BreachState {
   hydrateFromStorage: () => Promise<void>;
 }
 
-function sortBreachesNewestFirst(breaches: BreachApiItem[]): BreachApiItem[] {
-  return [...breaches].sort((a, b) => {
-    const aTime = new Date(a.date).getTime();
-    const bTime = new Date(b.date).getTime();
-    return bTime - aTime;
-  });
-}
-
 function toStoredCredentials(credentials: Credential[]): StoredCredential[] {
   return credentials.map((credential) => ({
     id: credential.id,
     value: credential.value,
     type: credential.type,
   }));
-}
-
-function formatCredentialSummary(breaches: BreachApiItem[]): string {
-  const values = Array.from(
-    new Set(
-      breaches
-        .map((breach) => breach.matchedCredential)
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    )
-  );
-
-  if (values.length === 0) {
-    return "your monitored accounts";
-  }
-
-  if (values.length === 1) {
-    return values[0];
-  }
-
-  if (values.length === 2) {
-    return `${values[0]} and ${values[1]}`;
-  }
-
-  return `${values[0]}, ${values[1]}, and ${values.length - 2} more`;
-}
-
-function countActiveBreaches(breaches: BreachApiItem[]): number {
-  return breaches.filter((breach) => !breach.resolved).length;
-}
-
-function applyResolvedState(
-  breaches: BreachApiItem[],
-  resolvedById: Map<string, boolean>
-): BreachApiItem[] {
-  return breaches.map((breach) => ({
-    ...breach,
-    resolved: resolvedById.get(breach.id) ?? Boolean(breach.resolved),
-  }));
-}
-
-function applyPersistedBreachFields(
-  breaches: BreachApiItem[],
-  previousById: Map<string, BreachApiItem>
-): BreachApiItem[] {
-  return breaches.map((breach) => {
-    const previous = previousById.get(breach.id);
-    if (!previous) {
-      return breach;
-    }
-
-    return {
-      ...breach,
-      resolved: Boolean(previous.resolved),
-      aiGuidance:
-        typeof previous.aiGuidance === "string" && previous.aiGuidance.trim().length > 0
-          ? previous.aiGuidance
-          : breach.aiGuidance,
-    };
-  });
 }
 
 function persistCredentialsAsync(credentials: StoredCredential[]): void {
@@ -161,11 +99,6 @@ function parseStoredGuidance(
 
   return null;
 }
-
-function deriveResolvedOnHydration(breach: BreachApiItem): boolean {
-  return Boolean(breach.resolved);
-}
-
 export const useBreachStore = create<BreachState>()((set, get) => ({
   credentials: [],
   breaches: [],
@@ -363,7 +296,7 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
 
       const sortedBreaches = sortBreachesNewestFirst(breaches).map((breach) => ({
         ...breach,
-        resolved: deriveResolvedOnHydration(breach),
+        resolved: Boolean(breach.resolved),
       }));
 
       set({
@@ -405,57 +338,37 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
     set({ isScanning: true, scanError: null });
     
     try {
-      const previousBreaches = get().breaches;
-      const previousIds = new Set(previousBreaches.map((breach) => breach.id));
-      const previousById = new Map(previousBreaches.map((breach) => [breach.id, breach]));
-      const resolvedById = new Map(
-        previousBreaches.map((breach) => [breach.id, Boolean(breach.resolved)])
-      );
-
-      const itemsToScan = get().credentials.map((c) => c.value);
-      const results = await checkAllCredentials(itemsToScan);
-
-      // Drop results for credentials deleted while the scan was running
-      const currentValues = new Set(get().credentials.map((c) => c.value));
-      const activeResults = results.filter(
-        (b) => !b.matchedCredential || currentValues.has(b.matchedCredential)
-      );
-
-      const sortedResults = applyPersistedBreachFields(
-        applyResolvedState(sortBreachesNewestFirst(activeResults), resolvedById),
-        previousById
-      );
-      const newBreaches = sortedResults.filter((breach) => !previousIds.has(breach.id));
+      const currentCredentialsSnapshot = get().credentials;
+      const outcome = await executeBreachScan({
+        credentials: currentCredentialsSnapshot,
+        previousBreaches: get().breaches,
+      });
       
       set({ 
-        breaches: sortedResults,
+        breaches: outcome.breaches,
         lastScanTimestamp: Date.now(),
         isScanning: false,
         scanError: null,
       });
 
-      persistBreachCacheAsync(sortedResults);
+      persistBreachCacheAsync(outcome.breaches);
       persistCredentialsAsync(toStoredCredentials(get().credentials));
 
-      // Update the dashboard store with the count
       useDashboardStore.getState().updateDashboardData({
-        activeBreachesCount: countActiveBreaches(sortedResults)
+        activeBreachesCount: outcome.activeBreachesCount
       });
       useDashboardStore
         .getState()
-        .pruneSuggestionsForSource("breach", sortedResults.map((breach) => breach.id));
+        .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
-      if (notifyOnNew && newBreaches.length > 0) {
-        const credentialSummary = formatCredentialSummary(newBreaches);
+      if (notifyOnNew && outcome.alertPayload) {
         await sendLocalNotification(
           "New Data Breach Detected",
-          `New breach data found for ${credentialSummary}. Tap to review in Breach tab.`,
+          `New breach data found for ${outcome.alertPayload.credentialSummary}. Tap to review in Breach tab.`,
           {
             type: "BREACH_ALERT",
-            breachIds: newBreaches.map((breach) => breach.id),
-            credentials: newBreaches
-              .map((breach) => breach.matchedCredential)
-              .filter((value): value is string => typeof value === "string" && value.length > 0),
+            breachIds: outcome.alertPayload.breachIds,
+            credentials: outcome.alertPayload.credentials,
             threatlensInternal: true,
           }
         );

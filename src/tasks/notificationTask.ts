@@ -60,7 +60,7 @@ export default async function notificationTask(taskData: TaskData): Promise<void
     if (result.classification === "UNAVAILABLE") return;
 
     log("classified", `${result.classification} (${result.confidence}%) from ${packageName} [headless]`);
-    useScannerStore.getState().recordBackgroundScan(result);
+    await useScannerStore.getState().recordBackgroundScan(result);
     await persistPendingScan(result);
 
     const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(result))));

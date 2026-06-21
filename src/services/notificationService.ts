@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { NativeModules, Platform } from 'react-native';
+import { buildNotificationDeepLink } from './deepLinkService';
 
 const THREAT_CHANNEL_ID = 'threat-alerts';
 
@@ -39,18 +40,7 @@ export async function requestNotificationPermissions() {
 
 export async function sendLocalNotification(title: string, body: string, data?: Record<string, unknown>) {
   if (Platform.OS === 'android') {
-    let deepLink = '';
-    if (typeof data?.encodedResult === 'string' && data.encodedResult) {
-      deepLink = `threatlens://scan/result?data=${encodeURIComponent(data.encodedResult)}`;
-    } else if (data?.type === 'BREACH_ALERT') {
-      const ids = Array.isArray(data.breachIds) ? data.breachIds : [];
-      deepLink = ids.length === 1
-        ? `threatlens://breach/${ids[0]}`
-        : 'threatlens://breach';
-    } else if (data?.type === 'PASTE_FULL_NOTIFICATION_PROMPT') {
-      const capturedText = typeof data.capturedText === 'string' ? data.capturedText : '';
-      deepLink = `threatlens://scanner?prefill=${encodeURIComponent(capturedText)}`;
-    }
+    const deepLink = buildNotificationDeepLink(data);
     NativeModules.NotificationModule.showNotification(title, body, deepLink);
     return;
   }

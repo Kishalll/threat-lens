@@ -1,25 +1,13 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { useBreachStore } from "../stores/breachStore";
+import { useDashboardStore } from "../stores/dashboardStore";
 import { sendLocalNotification } from "./notificationService";
-import { checkAllCredentials } from "./breachApiService";
+import { executeBreachScan } from "./breachDomainService";
+import { replaceCachedBreaches } from "./storageService";
 import { log } from "../utils/activityLog";
 
 const BREACH_CHECK_TASK = "BACKGROUND_BREACH_CHECK";
-
-function summarizeCredentials(values: string[]): string {
-  const uniqueValues = Array.from(new Set(values.filter((value) => value.trim().length > 0)));
-  if (uniqueValues.length === 0) {
-    return "your monitored accounts";
-  }
-  if (uniqueValues.length === 1) {
-    return uniqueValues[0];
-  }
-  if (uniqueValues.length === 2) {
-    return `${uniqueValues[0]} and ${uniqueValues[1]}`;
-  }
-  return `${uniqueValues[0]}, ${uniqueValues[1]}, and ${uniqueValues.length - 2} more`;
-}
 
 TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
   try {
@@ -30,55 +18,30 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
 
     log("breach_check", `checking ${credentials.length} credentials...`);
 
-    const itemsToCheck = credentials.map(c => c.value);
-    
-    // Remember previous breach IDs to detect new ones
-    const previousBreaches = useBreachStore.getState().breaches;
-    const prevIds = new Set(previousBreaches.map(b => b.id));
-    const previousById = new Map(previousBreaches.map((breach) => [breach.id, breach]));
-
-    const results = await checkAllCredentials(itemsToCheck);
-    const mergedResults = results.map((breach) => {
-      const previous = previousById.get(breach.id);
-      if (!previous) {
-        return breach;
-      }
-
-      return {
-        ...breach,
-        resolved: Boolean(previous.resolved),
-        aiGuidance:
-          typeof previous.aiGuidance === "string" && previous.aiGuidance.trim().length > 0
-            ? previous.aiGuidance
-            : breach.aiGuidance,
-      };
+    const outcome = await executeBreachScan({
+      credentials,
+      previousBreaches: useBreachStore.getState().breaches,
     });
-    
-    // Update state
-    useBreachStore.setState({ breaches: mergedResults, lastScanTimestamp: Date.now() });
 
-    // Check for NEW breaches
-    const newBreaches = mergedResults.filter(b => !prevIds.has(b.id));
+    await replaceCachedBreaches(outcome.breaches);
+    useBreachStore.setState({ breaches: outcome.breaches, lastScanTimestamp: Date.now() });
+    useDashboardStore.getState().updateDashboardData({
+      activeBreachesCount: outcome.activeBreachesCount,
+    });
+    useDashboardStore
+      .getState()
+      .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
-    if (newBreaches.length > 0) {
-      const credentialSummary = summarizeCredentials(
-        newBreaches
-          .map((breach) => breach.matchedCredential)
-          .filter((value): value is string => typeof value === "string")
-      );
+    if (outcome.alertPayload) {
+      log("breach_found", `${outcome.alertPayload.count} new breach(es) found`);
 
-      log("breach_found", `${newBreaches.length} new breach(es) found`);
-
-      // Fire local notification
       await sendLocalNotification(
         "New Data Breach Detected",
-        `${newBreaches.length} new breach(es) found for ${credentialSummary}. Tap to review.`,
+        `${outcome.alertPayload.count} new breach(es) found for ${outcome.alertPayload.credentialSummary}. Tap to review.`,
         {
           type: "BREACH_ALERT",
-          breachIds: newBreaches.map(b => b.id),
-          credentials: newBreaches
-            .map((breach) => breach.matchedCredential)
-            .filter((value): value is string => typeof value === "string"),
+          breachIds: outcome.alertPayload.breachIds,
+          credentials: outcome.alertPayload.credentials,
           threatlensInternal: true,
         }
       );

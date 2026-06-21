@@ -7,7 +7,8 @@ import { useEffect } from "react";
 import { Alert, AppState, LogBox, NativeModules, Platform, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-import { initDatabase, insertScanResult } from "../src/services/storageService";
+import { parseThreatLensUrl } from "../src/services/deepLinkService";
+import { initDatabase } from "../src/services/storageService";
 import { registerBackgroundFetchTasks } from "../src/services/backgroundTasks";
 import {
   getInitialSharedText,
@@ -38,18 +39,6 @@ export default function RootLayout() {
 
   const router = useRouter();
 
-  const persistRecoveredScan = async (result: ScanResult): Promise<void> => {
-    if (!result?.id) {
-      return;
-    }
-
-    try {
-      await insertScanResult(result);
-    } catch {
-      // Recovery should continue even if local persistence fails for one item.
-    }
-  };
-
   const syncNativeAppActiveState = (isActive: boolean): void => {
     if (Platform.OS !== "android" || !NativeModules.NotificationModule?.setAppActive) {
       return;
@@ -78,6 +67,8 @@ export default function RootLayout() {
         syncNativeAppActiveState(AppState.currentState === "active");
 
         await initDatabase();
+        const scannerStore = useScannerStore.getState();
+        await scannerStore.hydrateFromStorage();
 
         // Load any scan results persisted by the Kotlin worker while the app was killed
         try {
@@ -86,12 +77,10 @@ export default function RootLayout() {
             const parsed: ScanResult[] = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
               log("pending_scans_loaded", `Loaded ${parsed.length} missed scans`);
-              const store = useScannerStore.getState();
-              const existingIds = new Set(store.history.map((r) => r.id));
+              const existingIds = new Set(scannerStore.history.map((r) => r.id));
               for (const result of parsed) {
                 if (result?.id && !existingIds.has(result.id)) {
-                  await persistRecoveredScan(result);
-                  store.recordBackgroundScan(result);
+                  await scannerStore.recordBackgroundScan(result);
                   existingIds.add(result.id);
                 }
               }
@@ -159,44 +148,44 @@ export default function RootLayout() {
     });
 
     const handleUrl = async (url: string | null) => {
-      if (url) {
+      const route = parseThreatLensUrl(url);
+      if (!route) {
+        return;
+      }
+
+      if (route.type === "scan-result") {
         try {
-          const parsed = Linking.parse(url);
-          const fullPath = [parsed.hostname, parsed.path].filter(Boolean).join('/');
+          const result = JSON.parse(
+            decodeURIComponent(escape(atob(route.encodedResult)))
+          ) as ScanResult;
+          await useScannerStore.getState().recordBackgroundScan(result);
+        } catch {
+          // Routing should continue even if result recovery fails.
+        }
+        router.replace({
+          pathname: "/scan/result",
+          params: { encodedResult: route.encodedResult, source: route.source },
+        });
+        return;
+      }
 
-          if (fullPath === 'scan/result' && parsed.queryParams?.data) {
-            const encodedResult = parsed.queryParams.data as string;
-            try {
-              const result = JSON.parse(decodeURIComponent(escape(atob(encodedResult)))) as ScanResult;
-              await persistRecoveredScan(result);
-              useScannerStore.getState().recordBackgroundScan(result);
-            } catch {}
-            router.replace({ pathname: '/scan/result', params: { encodedResult, source: "notification" } });
-            return;
-          }
+      if (route.type === "scanner-prefill") {
+        router.push({ pathname: "/(tabs)/scanner", params: { prefill: route.prefill } });
+        return;
+      }
 
-          // Paste prompt tap: threatlens://scanner?prefill=<text>
-          if (parsed.hostname === 'scanner' && parsed.queryParams?.prefill) {
-            const prefill = parsed.queryParams.prefill as string;
-            router.push({ pathname: '/(tabs)/scanner', params: { prefill } });
-            return;
-          }
+      if (route.type === "breach-detail") {
+        router.push({ pathname: "/breach/[id]", params: { id: route.breachId } });
+        return;
+      }
 
-          if (parsed.hostname === 'breach') {
-            const breachId = parsed.path;
-            if (breachId) {
-              router.push({ pathname: '/breach/[id]', params: { id: breachId } });
-            } else {
-              router.push('/(tabs)/breach');
-            }
-            return;
-          }
+      if (route.type === "breach-list") {
+        router.push("/(tabs)/breach");
+        return;
+      }
 
-          const textAttr =
-            parsed.queryParams?.text ||
-            parsed.queryParams?.["android.intent.extra.TEXT"];
-          if (textAttr && typeof textAttr === "string") void handleSharedText(textAttr);
-        } catch (e) {}
+      if (route.type === "shared-text") {
+        void handleSharedText(route.text);
       }
     };
 

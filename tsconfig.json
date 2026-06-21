@@ -5,10 +5,12 @@
     "baseUrl": ".",
     "jsx": "react-native",
     "esModuleInterop": true,
+    "types": ["jest", "node"],
     "paths": {
       "@types/*": ["src/types/*"],
       "@constants/*": ["src/constants/*"],
       "@services/*": ["src/services/*"]
     }
-  }
+  },
+  "exclude": ["workers"]
 }
