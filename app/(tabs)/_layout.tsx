@@ -25,15 +25,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="breach"
-        options={{
-          title: "Breaches",
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="shield-off" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="scanner"
         options={{
           title: "Scanner",
@@ -48,6 +39,15 @@ export default function TabsLayout() {
           title: "Shield",
           tabBarIcon: ({ color, size }) => (
             <Feather name="image" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="breach"
+        options={{
+          title: "Breaches",
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="shield-off" size={size} color={color} />
           ),
         }}
       />
