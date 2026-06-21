@@ -168,15 +168,8 @@ function ensureP256PublicKeyBytes(input: string): Uint8Array {
   .replace(/\s+/g, "")
   .replace(/\\/g, "");  // strip any stray backslashes
 
-  // TEMPORARY DEBUG
-  console.log("[ThreatLens:pemDebug] base64Body length:", base64Body.length);
-  console.log("[ThreatLens:pemDebug] base64Body:", base64Body);
-
   const padded = base64Body + "==".slice((base64Body.length % 4) || 4);
   const decoded = base64ToBytes(padded);
-
-  console.log("[ThreatLens:pemDebug] decoded byte length:", decoded.length);
-  console.log("[ThreatLens:pemDebug] first 4 bytes:", decoded[0], decoded[1], decoded[2], decoded[3]);
 
   if (decoded.length === 65 && decoded[0] === 0x04) {
     return decoded;

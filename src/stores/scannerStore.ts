@@ -11,6 +11,14 @@ const scanRepository = createScanRepository({
   getAllScanResults,
 });
 
+function appendScanToHistory(history: ScanResult[], result: ScanResult): ScanResult[] {
+  return dedupeScanResults([result, ...history]);
+}
+
+function syncHistoryToDashboard(history: ScanResult[]): void {
+  useDashboardStore.getState().hydrateScanHistory(history);
+}
+
 function recordScanInDashboard(result: ScanResult): void {
   const dash = useDashboardStore.getState();
   if (result.classification !== "UNAVAILABLE") {
@@ -47,7 +55,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
   hydrateFromStorage: async () => {
     const history = await scanRepository.loadHistory();
     set({ history });
-    useDashboardStore.getState().hydrateScanHistory(history);
+    syncHistoryToDashboard(history);
   },
 
   scanManualText: async (text: string) => {
@@ -65,10 +73,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
 
       await scanRepository.save(result);
 
-      set((state) => ({
-        history: dedupeScanResults([result, ...state.history]),
-        isScanning: false,
-      }));
+      set((state) => ({ history: appendScanToHistory(state.history, result), isScanning: false }));
       recordScanInDashboard(result);
 
       return result;
@@ -97,7 +102,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
     }
 
     await scanRepository.save(result);
-    set((state) => ({ history: dedupeScanResults([result, ...state.history]) }));
+    set((state) => ({ history: appendScanToHistory(state.history, result) }));
     recordScanInDashboard(result);
   },
 

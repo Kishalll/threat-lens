@@ -3,12 +3,7 @@ import * as TaskManager from 'expo-task-manager';
 import { useBreachStore } from "../stores/breachStore";
 import { useDashboardStore } from "../stores/dashboardStore";
 import { sendLocalNotification } from "./notificationService";
-import { checkAllCredentials } from "./breachApiService";
-import {
-  countActiveBreaches,
-  formatCredentialSummary,
-  mergeBreachScanResults,
-} from "./breachPipeline";
+import { executeBreachScan } from "./breachDomainService";
 import { replaceCachedBreaches } from "./storageService";
 import { log } from "../utils/activityLog";
 
@@ -23,34 +18,30 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
 
     log("breach_check", `checking ${credentials.length} credentials...`);
 
-    const itemsToCheck = credentials.map((credential) => credential.value);
-    const previousBreaches = useBreachStore.getState().breaches;
-    const results = await checkAllCredentials(itemsToCheck);
-    const outcome = mergeBreachScanResults(previousBreaches, results, itemsToCheck);
+    const outcome = await executeBreachScan({
+      credentials,
+      previousBreaches: useBreachStore.getState().breaches,
+    });
 
     await replaceCachedBreaches(outcome.breaches);
     useBreachStore.setState({ breaches: outcome.breaches, lastScanTimestamp: Date.now() });
     useDashboardStore.getState().updateDashboardData({
-      activeBreachesCount: countActiveBreaches(outcome.breaches),
+      activeBreachesCount: outcome.activeBreachesCount,
     });
     useDashboardStore
       .getState()
       .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
-    if (outcome.newBreaches.length > 0) {
-      const credentialSummary = formatCredentialSummary(outcome.newBreaches);
-
-      log("breach_found", `${outcome.newBreaches.length} new breach(es) found`);
+    if (outcome.alertPayload) {
+      log("breach_found", `${outcome.alertPayload.count} new breach(es) found`);
 
       await sendLocalNotification(
         "New Data Breach Detected",
-        `${outcome.newBreaches.length} new breach(es) found for ${credentialSummary}. Tap to review.`,
+        `${outcome.alertPayload.count} new breach(es) found for ${outcome.alertPayload.credentialSummary}. Tap to review.`,
         {
           type: "BREACH_ALERT",
-          breachIds: outcome.newBreaches.map((breach) => breach.id),
-          credentials: outcome.newBreaches
-            .map((breach) => breach.matchedCredential)
-            .filter((value): value is string => typeof value === "string"),
+          breachIds: outcome.alertPayload.breachIds,
+          credentials: outcome.alertPayload.credentials,
           threatlensInternal: true,
         }
       );

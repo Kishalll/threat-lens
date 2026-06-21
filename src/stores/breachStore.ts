@@ -1,13 +1,12 @@
 import { create } from "zustand";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
-import { BreachApiItem, checkAllCredentials } from "../services/breachApiService";
+import { BreachApiItem } from "../services/breachApiService";
 import {
   countActiveBreaches,
-  formatCredentialSummary,
-  mergeBreachScanResults,
   sortBreachesNewestFirst,
 } from "../services/breachPipeline";
+import { executeBreachScan } from "../services/breachDomainService";
 import {
   getCachedBreaches,
   getCredentials,
@@ -339,14 +338,11 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
     set({ isScanning: true, scanError: null });
     
     try {
-      const previousBreaches = get().breaches;
-      const itemsToScan = get().credentials.map((c) => c.value);
-      const results = await checkAllCredentials(itemsToScan);
-      const outcome = mergeBreachScanResults(
-        previousBreaches,
-        results,
-        get().credentials.map((credential) => credential.value)
-      );
+      const currentCredentialsSnapshot = get().credentials;
+      const outcome = await executeBreachScan({
+        credentials: currentCredentialsSnapshot,
+        previousBreaches: get().breaches,
+      });
       
       set({ 
         breaches: outcome.breaches,
@@ -358,25 +354,21 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
       persistBreachCacheAsync(outcome.breaches);
       persistCredentialsAsync(toStoredCredentials(get().credentials));
 
-      // Update the dashboard store with the count
       useDashboardStore.getState().updateDashboardData({
-        activeBreachesCount: countActiveBreaches(outcome.breaches)
+        activeBreachesCount: outcome.activeBreachesCount
       });
       useDashboardStore
         .getState()
         .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
-      if (notifyOnNew && outcome.newBreaches.length > 0) {
-        const credentialSummary = formatCredentialSummary(outcome.newBreaches);
+      if (notifyOnNew && outcome.alertPayload) {
         await sendLocalNotification(
           "New Data Breach Detected",
-          `New breach data found for ${credentialSummary}. Tap to review in Breach tab.`,
+          `New breach data found for ${outcome.alertPayload.credentialSummary}. Tap to review in Breach tab.`,
           {
             type: "BREACH_ALERT",
-            breachIds: outcome.newBreaches.map((breach) => breach.id),
-            credentials: outcome.newBreaches
-              .map((breach) => breach.matchedCredential)
-              .filter((value): value is string => typeof value === "string" && value.length > 0),
+            breachIds: outcome.alertPayload.breachIds,
+            credentials: outcome.alertPayload.credentials,
             threatlensInternal: true,
           }
         );
