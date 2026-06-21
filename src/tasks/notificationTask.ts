@@ -1,5 +1,6 @@
 import { classifyMessage } from "../services/nimService";
 import { sendLocalNotification } from "../services/notificationService";
+import { useScannerStore } from "../stores/scannerStore";
 import type { ScanResult } from "../types";
 
 const DANGEROUS = new Set(["SPAM", "SCAM", "PHISHING"]);
@@ -41,6 +42,8 @@ export default async function notificationTask(taskData: TaskData): Promise<void
   try {
     const result = await classifyMessage(text);
     if (result.classification === "UNAVAILABLE") return;
+
+    useScannerStore.getState().recordBackgroundScan(result);
 
     // Encode result as base64 so the tap can decode it without SQLite
     const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(result))));

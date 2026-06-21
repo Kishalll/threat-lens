@@ -149,6 +149,42 @@ const INSTAGRAM_LOW_SIGNAL_PATTERNS = [
   /\bposted to (their )?(story|reel)\b/i,
 ];
 
+// Short casual messages with no digits or URLs — "did u commit", "ok", "wat r the changes"
+// Applied to messaging apps only. Email packages are intentionally excluded so
+// short subjects like "Your invoice is ready" still get classified.
+const SHORT_MESSAGE_PATTERN = /^[^\d\n]{0,60}$/;
+
+const MESSAGING_PACKAGES_WITH_SHORT_FILTER = new Set([
+  "com.whatsapp",
+  "com.whatsapp.w4b",
+  "com.google.android.apps.messaging",
+  "com.google.android.apps.googlevoice",
+  "com.android.mms",
+  "com.samsung.android.messaging",
+  "com.sonyericsson.conversations",
+  "com.miui.smsextra",
+  "com.oneplus.mms",
+  "com.oplus.message",
+  "com.coloros.message",
+  "com.vivo.messaging",
+  "com.htc.sense.mms",
+  "com.huawei.message",
+  "org.telegram.messenger",
+  "org.telegram.plus",
+  "org.thoughtcrime.securesms",
+  "com.facebook.orca",
+  "com.instagram.android",
+  "com.discord",
+  "jp.naver.line.android",
+  "com.tencent.mm",
+  "com.viber.voip",
+  "com.kakao.talk",
+  "com.zing.zalo",
+  "com.skype.raider",
+  "com.microsoft.teams",
+  "com.bbm",
+]);
+
 const APP_SPECIFIC_LOW_SIGNAL_PATTERNS: Record<string, RegExp[]> = {
   "com.microsoft.teams": TEAMS_LOW_SIGNAL_PATTERNS,
   "com.facebook.orca": MESSENGER_LOW_SIGNAL_PATTERNS,
@@ -242,6 +278,16 @@ function isLowSignalNotification(packageName: string, title: string, text: strin
   }
 
   const normalizedPackage = packageName.trim().toLowerCase();
+
+  // Short casual message filter — only for messaging apps, not email
+  if (MESSAGING_PACKAGES_WITH_SHORT_FILTER.has(normalizedPackage) && SHORT_MESSAGE_PATTERN.test(combined)) {
+    // Never skip if it contains threat-indicative keywords
+    const hasThreatKeyword = /kyc|otp|cvv|pin|password|lottery|prize|winner|verify|suspend|block|arrest|urgent|click here|tap here|http/i.test(combined);
+    if (!hasThreatKeyword) {
+      return true;
+    }
+  }
+
   const packagePatterns = APP_SPECIFIC_LOW_SIGNAL_PATTERNS[normalizedPackage];
   if (Array.isArray(packagePatterns)) {
     return packagePatterns.some((pattern) => pattern.test(combined));

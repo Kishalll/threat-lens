@@ -74,6 +74,15 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
     })),
 
   recordBackgroundScan: (result: ScanResult) => {
+    const DEDUP_WINDOW_MS = 120_000;
+    const now = Date.now();
+    const isDuplicate = useScannerStore.getState().history.some(
+      (r) =>
+        r.messagePreview === result.messagePreview &&
+        r.classification === result.classification &&
+        now - r.timestamp < DEDUP_WINDOW_MS
+    );
+    if (isDuplicate) return;
     set((state) => ({ history: [result, ...state.history] }));
     const dash = useDashboardStore.getState();
     if (result.classification !== "UNAVAILABLE") {

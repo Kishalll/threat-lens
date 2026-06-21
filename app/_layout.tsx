@@ -37,19 +37,32 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Initialize here — inside useEffect — so the native bridge is fully ready.
+    // One-time setup — must not re-run when router changes
     initializeNotificationInterceptor();
+    void requestNotificationPermissions();
+    void setupNotificationChannel();
+    void registerBackgroundFetchTasks();
 
+    void (async () => {
+      try {
+        await initDatabase();
+        const breachStore = useBreachStore.getState();
+        await breachStore.hydrateFromStorage();
+        const hydratedState = useBreachStore.getState();
+        if (hydratedState.credentials.length > 0) {
+          await hydratedState.runScan({ notifyOnNew: true });
+        }
+      } catch (error: unknown) {
+        if (DEBUG) console.error("Root initDatabase failed", error);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const checkNotificationAccess = async () => {
-      if (Platform.OS !== "android") {
-        return;
-      }
-
+      if (Platform.OS !== "android") return;
       const granted = await isNotificationAccessGranted();
-      if (granted) {
-        return;
-      }
-
+      if (granted) return;
       Alert.alert(
         "Enable Notification Access",
         "ThreatLens needs Notification Access to scan incoming notifications automatically.",
@@ -59,43 +72,25 @@ export default function RootLayout() {
         ]
       );
     };
-
-    // 🔥 1. Ask notification permission
-    void requestNotificationPermissions();
-
-    // 🔥 1a. Set up high-importance channel (Android)
-    void setupNotificationChannel();
-
-    // 🔥 2. Background tasks
-    void registerBackgroundFetchTasks();
-
     void checkNotificationAccess();
+
+    const handleSharedText = async (text: string) => {
+      const normalizedText = text.trim();
+      if (!normalizedText) return;
+      router.push({ pathname: "/scanner", params: { prefill: normalizedText } });
+    };
 
     const sharedTextSubscription = notificationEmitter?.addListener(
       "SharedTextReceived",
       (event: { text?: unknown }) => {
         const text = typeof event?.text === "string" ? event.text : "";
-        if (text.trim().length > 0) {
-          void handleSharedText(text);
-        }
+        if (text.trim().length > 0) void handleSharedText(text);
       }
     );
 
     void getInitialSharedText().then((sharedText) => {
-      if (sharedText) {
-        void handleSharedText(sharedText);
-      }
+      if (sharedText) void handleSharedText(sharedText);
     });
-
-    // 🔗 Deep link handler (your existing logic)
-    const handleSharedText = async (text: string) => {
-      const normalizedText = text.trim();
-      if (!normalizedText) {
-        return;
-      }
-
-      router.push({ pathname: "/scanner", params: { prefill: normalizedText } });
-    };
 
     const handleUrl = (url: string | null) => {
       if (url) {
@@ -103,7 +98,6 @@ export default function RootLayout() {
           const parsed = Linking.parse(url);
           const fullPath = [parsed.hostname, parsed.path].filter(Boolean).join('/');
 
-          // Native scan alert tap: threatlens://scan/result?data=<base64>
           if (fullPath === 'scan/result' && parsed.queryParams?.data) {
             const encodedResult = parsed.queryParams.data as string;
             try {
@@ -114,7 +108,6 @@ export default function RootLayout() {
             return;
           }
 
-          // Native breach tap: threatlens://breach/<id> or threatlens://breach
           if (parsed.hostname === 'breach') {
             const breachId = parsed.path;
             if (breachId) {
@@ -128,45 +121,16 @@ export default function RootLayout() {
           const textAttr =
             parsed.queryParams?.text ||
             parsed.queryParams?.["android.intent.extra.TEXT"];
-
-          if (textAttr && typeof textAttr === "string") {
-            void handleSharedText(textAttr);
-          }
+          if (textAttr && typeof textAttr === "string") void handleSharedText(textAttr);
         } catch (e) {}
       }
     };
 
     Linking.getInitialURL().then((url) => {
-      // Defer so expo-router's navigation container is ready before we push
       setTimeout(() => handleUrl(url), 300);
     });
-    const linkingSubscription = Linking.addEventListener("url", ({ url }) =>
-      handleUrl(url)
-    );
+    const linkingSubscription = Linking.addEventListener("url", ({ url }) => handleUrl(url));
 
-    // 🗄️ Init DB + hydrate persisted data
-    void (async () => {
-      try {
-        await initDatabase();
-
-        const breachStore = useBreachStore.getState();
-        await breachStore.hydrateFromStorage();
-
-        const hydratedState = useBreachStore.getState();
-        if (hydratedState.credentials.length > 0) {
-          await hydratedState.runScan({ notifyOnNew: true });
-        }
-      } catch (error: unknown) {
-        const typedError =
-          error instanceof Error
-            ? error
-            : new Error("Database initialization failed");
-
-        if (DEBUG) console.error("Root initDatabase failed", typedError);
-      }
-    })();
-
-    // 🧹 CLEANUP
     return () => {
       linkingSubscription.remove();
       sharedTextSubscription?.remove();
