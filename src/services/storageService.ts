@@ -256,20 +256,31 @@ export async function insertScanResult(result: ScanResult): Promise<void> {
   });
 }
 
+function toScanResult(row: Record<string, unknown>): ScanResult {
+  return {
+    id: row.id as string,
+    classification: row.classification as ScanResult["classification"],
+    confidence: row.confidence as number,
+    messagePreview: row.messagePreview as string,
+    timestamp: row.timestamp as number,
+    redFlags: JSON.parse(row.redFlags as string),
+    suggestedActions: JSON.parse(row.suggestedActions as string),
+    explanation: row.explanation as string,
+  };
+}
+
+export async function getAllScanResults(): Promise<ScanResult[]> {
+  const rows = await withDatabase((database) =>
+    database.getAllAsync("SELECT * FROM scan_results ORDER BY timestamp DESC")
+  );
+
+  return rows.map((row) => toScanResult(row as Record<string, unknown>));
+}
+
 export async function getScanResult(id: string): Promise<ScanResult | null> {
   const row = await withDatabase((database) =>
     database.getFirstAsync("SELECT * FROM scan_results WHERE id = ?", [id])
   );
   if (!row) return null;
-  const r = row as Record<string, unknown>;
-  return {
-    id: r.id as string,
-    classification: r.classification as ScanResult["classification"],
-    confidence: r.confidence as number,
-    messagePreview: r.messagePreview as string,
-    timestamp: r.timestamp as number,
-    redFlags: JSON.parse(r.redFlags as string),
-    suggestedActions: JSON.parse(r.suggestedActions as string),
-    explanation: r.explanation as string,
-  };
+  return toScanResult(row as Record<string, unknown>);
 }

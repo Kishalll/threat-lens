@@ -549,7 +549,7 @@ export function initializeNotificationInterceptor() {
       log("classified", `${scanResult.classification} (${scanResult.confidence}%) from ${packageName}`);
 
       // Also record into scanner store history so it shows up in scan history.
-      useScannerStore.getState().recordBackgroundScan(scanResult);
+      await useScannerStore.getState().recordBackgroundScan(scanResult);
 
       // Encode result for deep link tap routing (same as headless path)
       const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(scanResult))));

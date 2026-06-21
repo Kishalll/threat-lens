@@ -1,116 +1,31 @@
 import { create } from "zustand";
-import { calculateSafetyScore, getScoreColor, type ScannedMessage } from "../utils/scoreCalculator";
+import type { ScanResult } from "../types";
+import type { ScannedMessage } from "../utils/scoreCalculator";
+import {
+  buildScanDashboardState,
+  calculateDashboardScore,
+  getScannedMessagesFromSuggestions,
+  normalizeSuggestionText,
+  type SuggestionSource,
+  type TrackedSuggestion,
+} from "./dashboardDerived";
 
-export type SuggestionSource = "scan" | "breach";
+export type { SuggestionSource, TrackedSuggestion } from "./dashboardDerived";
 
-export interface TrackedSuggestion {
-  id: string;
-  text: string;
-  acted: boolean;
-  isFallback: boolean;
-  source: SuggestionSource;
-  sourceId: string;
-}
-
-function normalizeSuggestionText(text: string): string {
-  return text.trim().replace(/\s+/g, " ");
-}
-
-function getScannedMessagesFromState(state: DashboardState): ScannedMessage[] {
-  const groupedSuggestions = new Map<
-    string,
-    { totalSuggestions: number; actedSuggestions: number }
-  >();
-
-  for (const suggestion of state.suggestions) {
-    if (suggestion.source !== "scan") {
-      continue;
-    }
-
-    const current = groupedSuggestions.get(suggestion.sourceId) ?? {
-      totalSuggestions: 0,
-      actedSuggestions: 0,
-    };
-
-    current.totalSuggestions += 1;
-    if (suggestion.acted) {
-      current.actedSuggestions += 1;
-    }
-    groupedSuggestions.set(suggestion.sourceId, current);
-  }
-
-  return state.scannedMessages.map((message) => {
-    const current = groupedSuggestions.get(message.id);
-    if (!current) {
-      return message;
-    }
-
-    return {
-      ...message,
-      totalSuggestions: current.totalSuggestions,
-      actedSuggestions: current.actedSuggestions,
-    };
-  });
-}
-
-function getBreachActionProgressFromSuggestions(
-  suggestions: TrackedSuggestion[]
-): {
-  totalSuggestions: number;
-  actedSuggestions: number;
-  resolvedBreachEquivalent: number;
-  pendingBreachCount: number;
-} {
-  const actionableSuggestions = suggestions.filter(
-    (suggestion) => suggestion.source === "breach" && !suggestion.isFallback
-  );
-
-  const perBreachTotals = new Map<string, { total: number; acted: number }>();
-  for (const suggestion of actionableSuggestions) {
-    const current = perBreachTotals.get(suggestion.sourceId) ?? { total: 0, acted: 0 };
-    current.total += 1;
-    if (suggestion.acted) {
-      current.acted += 1;
-    }
-    perBreachTotals.set(suggestion.sourceId, current);
-  }
-
-  let resolvedBreachEquivalent = 0;
-  let pendingBreachCount = 0;
-  for (const progress of perBreachTotals.values()) {
-    if (progress.total <= 0) {
-      continue;
-    }
-    resolvedBreachEquivalent += progress.acted / progress.total;
-    if (progress.acted < progress.total) {
-      pendingBreachCount += 1;
-    }
-  }
+function withDerivedState(
+  state: DashboardState,
+  patch: Partial<DashboardState>
+): DashboardState {
+  const nextState = {
+    ...state,
+    ...patch,
+    lastUpdateTimestamp: Date.now(),
+  };
 
   return {
-    totalSuggestions: actionableSuggestions.length,
-    actedSuggestions: actionableSuggestions.filter((suggestion) => suggestion.acted).length,
-    resolvedBreachEquivalent,
-    pendingBreachCount,
+    ...nextState,
+    ...calculateDashboardScore(nextState),
   };
-}
-
-function calculateScoreFromState(
-  state: Pick<
-    DashboardState,
-    "activeBreachesCount" | "protectedImagesCount" | "scannedMessages" | "suggestions"
-  >
-): number {
-  const hasPendingActions = state.suggestions.some(
-    (s) => !s.isFallback && !s.acted
-  );
-  return calculateSafetyScore({
-    activeBreachesCount: state.activeBreachesCount,
-    protectedImagesCount: state.protectedImagesCount,
-    scannedMessages: state.scannedMessages,
-    breachActionProgress: getBreachActionProgressFromSuggestions(state.suggestions),
-    hasPendingActions,
-  });
 }
 
 export interface DashboardState {
@@ -136,6 +51,7 @@ export interface DashboardState {
     options?: { isFallback?: boolean; replaceExisting?: boolean }
   ) => void;
   recordScannedMessage: (message: ScannedMessage) => void;
+  hydrateScanHistory: (scanResults: ScanResult[]) => void;
   markSuggestionAsDone: (id: string) => void;
   getSuggestionsForSource: (
     source: SuggestionSource,
@@ -161,18 +77,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   updateDashboardData: (data) => {
     set((state) => {
       const patch = typeof data === "function" ? data(state) : data;
-      const nextState = {
-        ...state,
-        ...patch,
-        lastUpdateTimestamp: Date.now(),
-      };
-      const score = calculateScoreFromState(nextState);
-
-      return {
-        ...nextState,
-        SafetyScore: score,
-        ScoreColor: getScoreColor(score),
-      };
+      return withDerivedState(state, patch);
     });
   },
 
@@ -260,24 +165,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           ),
           ...replacementSuggestions,
         ];
-        const scannedMessages = getScannedMessagesFromState({
+        const scannedMessages = getScannedMessagesFromSuggestions({
           ...state,
           suggestions,
-        });
-        const score = calculateScoreFromState({
-          ...state,
-          suggestions,
-          scannedMessages,
         });
 
-        return {
-          ...state,
+        return withDerivedState(state, {
           suggestions,
           scannedMessages,
-          lastUpdateTimestamp: Date.now(),
-          SafetyScore: score,
-          ScoreColor: getScoreColor(score),
-        };
+        });
       }
 
       const additions: TrackedSuggestion[] = uniqueIncoming
@@ -296,24 +192,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
 
       const suggestions = [...state.suggestions, ...additions];
-      const scannedMessages = getScannedMessagesFromState({
+      const scannedMessages = getScannedMessagesFromSuggestions({
         ...state,
         suggestions,
-      });
-      const score = calculateScoreFromState({
-        ...state,
-        suggestions,
-        scannedMessages,
       });
 
-      return {
-        ...state,
+      return withDerivedState(state, {
         suggestions,
         scannedMessages,
-        lastUpdateTimestamp: Date.now(),
-        SafetyScore: score,
-        ScoreColor: getScoreColor(score),
-      };
+      });
     });
   },
 
@@ -327,18 +214,27 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             )
           : [...state.scannedMessages, message];
 
-      const score = calculateScoreFromState({
+      return withDerivedState(state, { scannedMessages });
+    });
+  },
+
+  hydrateScanHistory: (scanResults) => {
+    set((state) => {
+      const scanDerived = buildScanDashboardState(scanResults);
+      const suggestions = [
+        ...state.suggestions.filter((suggestion) => suggestion.source !== "scan"),
+        ...scanDerived.suggestions,
+      ];
+      const scannedMessages = getScannedMessagesFromSuggestions({
         ...state,
-        scannedMessages,
+        suggestions,
+        scannedMessages: scanDerived.scannedMessages,
       });
 
-      return {
-        ...state,
+      return withDerivedState(state, {
+        suggestions,
         scannedMessages,
-        lastUpdateTimestamp: Date.now(),
-        SafetyScore: score,
-        ScoreColor: getScoreColor(score),
-      };
+      });
     });
   },
 
@@ -352,24 +248,15 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const suggestions = state.suggestions.map((suggestion) =>
         suggestion.id === id ? { ...suggestion, acted: true } : suggestion
       );
-      const scannedMessages = getScannedMessagesFromState({
+      const scannedMessages = getScannedMessagesFromSuggestions({
         ...state,
         suggestions,
-      });
-      const score = calculateScoreFromState({
-        ...state,
-        suggestions,
-        scannedMessages,
       });
 
-      return {
-        ...state,
+      return withDerivedState(state, {
         suggestions,
         scannedMessages,
-        lastUpdateTimestamp: Date.now(),
-        SafetyScore: score,
-        ScoreColor: getScoreColor(score),
-      };
+      });
     });
   },
 
@@ -390,31 +277,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         return state;
       }
 
-      const scannedMessages = getScannedMessagesFromState({
+      const scannedMessages = getScannedMessagesFromSuggestions({
         ...state,
         suggestions,
-      });
-      const score = calculateScoreFromState({
-        ...state,
-        suggestions,
-        scannedMessages,
       });
 
-      return {
-        ...state,
+      return withDerivedState(state, {
         suggestions,
         scannedMessages,
-        lastUpdateTimestamp: Date.now(),
-        SafetyScore: score,
-        ScoreColor: getScoreColor(score),
-      };
+      });
     });
   },
 
   refreshScore: () => {
     const s = get();
-    const scannedMessages = getScannedMessagesFromState(s);
-    const score = calculateScoreFromState({ ...s, scannedMessages });
-    set({ SafetyScore: score, ScoreColor: getScoreColor(score) });
+    const scannedMessages = getScannedMessagesFromSuggestions(s);
+    set(withDerivedState(s, { scannedMessages }));
   },
 }));

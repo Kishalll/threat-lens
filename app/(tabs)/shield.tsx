@@ -4,13 +4,8 @@ import {
   View,
   Text,
   Pressable,
-  Image,
-  ActivityIndicator,
   Alert,
-  TouchableOpacity,
   ScrollView,
-  TextInput,
-  Switch,
   Platform,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -19,6 +14,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
+import ProtectPanel from "../../src/components/shield/ProtectPanel";
+import SettingsPanel from "../../src/components/shield/SettingsPanel";
+import VerifyPanel from "../../src/components/shield/VerifyPanel";
 import {
   getImageTrustSettingsSnapshot,
   protectImageWithSignature,
@@ -452,291 +450,68 @@ export default function ShieldScreen() {
         <Text style={styles.sectionTitle}>{modeTitle} Flow</Text>
 
         {mode === "protect" ? (
-          <View style={styles.card}>
-            <View style={styles.imageContainer}>
-              {signedImageUri ? (
-                <Image source={{ uri: signedImageUri }} style={styles.imageBox} />
-              ) : protectSourceUri ? (
-                <Image source={{ uri: protectSourceUri }} style={styles.imageBox} />
-              ) : (
-                <View style={[styles.imageBox, styles.placeholderBox]}>
-                  <Feather name="image" size={44} color={THEME.colors.textTertiary} />
-                  <Text style={styles.placeholderText}>Select a photo to sign</Text>
-                </View>
-              )}
-              {(protectSourceUri || signedImageUri) && (
-                <TouchableOpacity style={styles.clearButton} onPress={resetProtectState}>
-                  <Feather name="x" size={20} color={THEME.colors.textPrimary} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
-                onPress={() => {
-                  void pickProtectImage();
-                }}
-              >
-                <Feather name="upload" size={18} color="#0A0F14" />
-                <Text style={styles.primaryButtonText}>Select</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  (!protectSourceUri || protectStep === "signing") && styles.disabledButton,
-                  pressed && styles.pressedButton,
-                ]}
-                disabled={!protectSourceUri || protectStep === "signing"}
-                onPress={() => {
-                  void runProtectFlow();
-                }}
-              >
-                {protectStep === "signing" ? (
-                  <ActivityIndicator size="small" color={THEME.colors.textPrimary} />
-                ) : (
-                  <>
-                    <Feather name="shield" size={18} color={THEME.colors.textPrimary} />
-                    <Text style={styles.secondaryButtonText}>Protect</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-
-            {protectStep === "done" && protectPayload ? (
-              <View style={styles.resultCard}>
-                <Text style={styles.resultTitle}>Signed Payload</Text>
-                <Text style={styles.resultLine}>Install: {protectPayload.installID}</Text>
-                <Text style={styles.resultLine}>SHA-256: {protectPayload.sha256.slice(0, 20)}...</Text>
-                <Text style={styles.resultLine}>pHash: {protectPayload.phash}</Text>
-                <Text style={styles.resultLine}>Signed at: {new Date(protectPayload.timestamp).toLocaleString()}</Text>
-                <Pressable
-                  style={({ pressed }) => [styles.outlineButton, pressed && styles.pressedButton]}
-                  onPress={() => {
-                    void saveToGallery();
-                  }}
-                >
-                  <Feather name="download" size={16} color={THEME.colors.accent} />
-                  <Text style={styles.outlineButtonText}>Save Signed Image</Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
+          <ProtectPanel
+            styles={styles}
+            protectSourceUri={protectSourceUri}
+            signedImageUri={signedImageUri}
+            protectPayload={protectPayload}
+            protectStep={protectStep}
+            onReset={resetProtectState}
+            onPickImage={() => {
+              void pickProtectImage();
+            }}
+            onProtect={() => {
+              void runProtectFlow();
+            }}
+            onSave={() => {
+              void saveToGallery();
+            }}
+          />
         ) : null}
 
         {mode === "verify" ? (
-          <View style={styles.card}>
-            <View style={styles.imageContainer}>
-              {verifySourceUri ? (
-                <Image source={{ uri: verifySourceUri }} style={styles.imageBox} />
-              ) : (
-                <View style={[styles.imageBox, styles.placeholderBox]}>
-                  <Feather name="search" size={44} color={THEME.colors.textTertiary} />
-                  <Text style={styles.placeholderText}>Select an image to verify</Text>
-                </View>
-              )}
-              {verifySourceUri && (
-                <TouchableOpacity style={styles.clearButton} onPress={resetVerifyState}>
-                  <Feather name="x" size={20} color={THEME.colors.textPrimary} />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Cloud revocation check</Text>
-              <Switch
-                value={verifyCloudCheck}
-                onValueChange={setVerifyCloudCheck}
-                thumbColor={verifyCloudCheck ? THEME.colors.accent : "#B8BDC6"}
-                trackColor={{ false: "#4A5160", true: "#2B7A5A" }}
-              />
-            </View>
-
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
-                onPress={() => {
-                  void pickVerifyImage();
-                }}
-              >
-                <Feather name="upload" size={18} color="#0A0F14" />
-                <Text style={styles.primaryButtonText}>Select</Text>
-              </Pressable>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  (!verifySourceUri || verifyLoading) && styles.disabledButton,
-                  pressed && styles.pressedButton,
-                ]}
-                disabled={!verifySourceUri || verifyLoading}
-                onPress={() => {
-                  void runVerifyFlow();
-                }}
-              >
-                {verifyLoading ? (
-                  <ActivityIndicator size="small" color={THEME.colors.textPrimary} />
-                ) : (
-                  <>
-                    <Feather name="check-square" size={18} color={THEME.colors.textPrimary} />
-                    <Text style={styles.secondaryButtonText}>Verify</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-
-            {verifyResult ? (
-              <View style={styles.resultCard}>
-                <View style={styles.statusHeader}>
-                  <Feather
-                    name={STATUS_META[verifyResult.status].icon}
-                    size={20}
-                    color={STATUS_META[verifyResult.status].color}
-                  />
-                  <Text
-                    style={[
-                      styles.statusTitle,
-                      { color: STATUS_META[verifyResult.status].color },
-                    ]}
-                  >
-                    {STATUS_META[verifyResult.status].label}
-                  </Text>
-                </View>
-                <Text style={styles.resultLine}>{verifyResult.summary}</Text>
-                <Text style={styles.resultLine}>Hash check: {verifyResult.checks.hashCheck ? "PASS" : "FAIL"}</Text>
-                <Text style={styles.resultLine}>
-                  Signature check: {verifyResult.checks.signatureCheck ? "PASS" : "FAIL"}
-                </Text>
-                <Text style={styles.resultLine}>
-                  Master cert check: {verifyResult.checks.masterCertCheck ? "PASS" : "FAIL"}
-                </Text>
-                <Text style={styles.resultLine}>Cloud check: {verifyResult.checks.cloudCheck.toUpperCase()}</Text>
-                {typeof verifyResult.pHashDistance === "number" ? (
-                  <Text style={styles.resultLine}>pHash distance: {verifyResult.pHashDistance}</Text>
-                ) : null}
-                {verifyResult.details.map((detail) => (
-                  <Text key={detail} style={styles.detailLine}>
-                    • {detail}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-          </View>
+          <VerifyPanel
+            styles={styles}
+            verifySourceUri={verifySourceUri}
+            verifyResult={verifyResult}
+            verifyLoading={verifyLoading}
+            verifyCloudCheck={verifyCloudCheck}
+            statusMeta={STATUS_META}
+            onReset={resetVerifyState}
+            onPickImage={() => {
+              void pickVerifyImage();
+            }}
+            onVerify={() => {
+              void runVerifyFlow();
+            }}
+            onToggleCloudCheck={setVerifyCloudCheck}
+          />
         ) : null}
 
         {mode === "settings" ? (
-          <View style={styles.card}>
-            {settingsLoading ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color={THEME.colors.accent} />
-                <Text style={styles.loadingText}>Loading trust settings...</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.inputLabel}>Trust Registry Base URL</Text>
-                <TextInput
-                  style={styles.input}
-                  value={registryBaseUrl}
-                  onChangeText={setRegistryBaseUrl}
-                  autoCapitalize="none"
-                  placeholder="https://region-project.cloudfunctions.net"
-                  placeholderTextColor={THEME.colors.textTertiary}
-                />
-
-                <Text style={styles.inputLabel}>Registry API Key</Text>
-                <TextInput
-                  style={styles.input}
-                  value={registryApiKey}
-                  onChangeText={setRegistryApiKey}
-                  autoCapitalize="none"
-                  placeholder="Optional bearer token"
-                  placeholderTextColor={THEME.colors.textTertiary}
-                />
-
-                <Text style={styles.inputLabel}>Master Public Key (PEM)</Text>
-                <TextInput
-                  style={[styles.input, styles.multiInput]}
-                  value={masterPublicPem}
-                  onChangeText={setMasterPublicPem}
-                  autoCapitalize="none"
-                  multiline
-                  placeholder="-----BEGIN PUBLIC KEY-----"
-                  placeholderTextColor={THEME.colors.textTertiary}
-                />
-
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    settingsSaving && styles.disabledButton,
-                    pressed && styles.pressedButton,
-                  ]}
-                  disabled={settingsSaving}
-                  onPress={() => {
-                    void saveSettings();
-                  }}
-                >
-                  {settingsSaving ? (
-                    <ActivityIndicator size="small" color="#0A0F14" />
-                  ) : (
-                    <>
-                      <Feather name="save" size={18} color="#0A0F14" />
-                      <Text style={styles.primaryButtonText}>Save Settings</Text>
-                    </>
-                  )}
-                </Pressable>
-
-                {Platform.OS === "android" ? (
-                  <View style={styles.folderManagementCard}>
-                    <Text style={styles.resultTitle}>Protected Export Folder</Text>
-                    <Text style={styles.resultLine}>{protectedFolderDisplay}</Text>
-                    <View style={styles.settingsActionsRow}>
-                      <Pressable
-                        style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-                        onPress={() => {
-                          void changeProtectedFolder();
-                        }}
-                      >
-                        <Feather name="folder-plus" size={16} color={THEME.colors.textPrimary} />
-                        <Text style={styles.secondaryButtonText}>Change Folder</Text>
-                      </Pressable>
-                      <Pressable
-                        style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-                        onPress={() => {
-                          void resetProtectedFolder();
-                        }}
-                      >
-                        <Feather name="rotate-ccw" size={16} color={THEME.colors.textPrimary} />
-                        <Text style={styles.secondaryButtonText}>Reset</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
-
-                {deviceSnapshot ? (
-                  <View style={styles.snapshotCard}>
-                    <Text style={styles.resultTitle}>Device Trust State</Text>
-                    <Text style={styles.resultLine}>
-                      Install ID: {deviceSnapshot.installID ?? "Not generated"}
-                    </Text>
-                    <Text style={styles.resultLine}>Device key: {deviceSnapshot.hasDeviceKey ? "Present" : "Missing"}</Text>
-                    <Text style={styles.resultLine}>
-                      Master cert: {deviceSnapshot.hasMasterCert ? "Present" : "Missing"}
-                    </Text>
-                    <Text style={styles.resultLine}>
-                      Register URL: {deviceSnapshot.registerUrl ?? "Not configured"}
-                    </Text>
-                    <Text style={styles.resultLine}>
-                      Verify URL: {deviceSnapshot.verifyUrl ?? "Not configured"}
-                    </Text>
-                    {registryApiKey.trim().length > 0 ? (
-                      <Text style={styles.resultLine}>API key: {maskSecret(registryApiKey.trim())}</Text>
-                    ) : null}
-                  </View>
-                ) : null}
-              </>
-            )}
-          </View>
+          <SettingsPanel
+            styles={styles}
+            settingsLoading={settingsLoading}
+            settingsSaving={settingsSaving}
+            registryBaseUrl={registryBaseUrl}
+            registryApiKey={registryApiKey}
+            masterPublicPem={masterPublicPem}
+            protectedFolderDisplay={protectedFolderDisplay}
+            deviceSnapshot={deviceSnapshot}
+            onChangeRegistryBaseUrl={setRegistryBaseUrl}
+            onChangeRegistryApiKey={setRegistryApiKey}
+            onChangeMasterPublicPem={setMasterPublicPem}
+            onSaveSettings={() => {
+              void saveSettings();
+            }}
+            onChangeFolder={() => {
+              void changeProtectedFolder();
+            }}
+            onResetFolder={() => {
+              void resetProtectedFolder();
+            }}
+            maskSecret={maskSecret}
+          />
         ) : null}
 
         {errorMessage ? (
