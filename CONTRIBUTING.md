@@ -146,10 +146,15 @@ Outputs a download link. The `.env` values are baked in at build time — tester
 ### ToDos
 
 - [x] replace gemini w nim models
-- [ ] tune model wrt indian scams
-- [ ] remove keys in img config tab
+- [x] remove keys in img config tab
 - [ ] add concel btn to cancel and revert img protect
-- [ ] improve text ui
+- [ ] remove spam category
+- [ ] make actions taken in msg allerted to be stored persistantly - now it resets after rebuild
+- [ ] score not fully recovered after completing action items
+- [ ] add subtabs in scan history to view only ine type of classification or only msgs which has pending actions 
 - [ ] add an app settings menu w btn on top right - own api key, themes, notif interception toggle, app laguage(ai responds in mentioned lang)
 - [ ] add app logo
+- [ ] improve text ui
+- [ ] tune model wrt indian scams
+
 
