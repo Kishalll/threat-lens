@@ -17,12 +17,6 @@ import type {
   VerificationStatus,
 } from "../../types/imageTrust";
 import {
-  MASTER_PUBLIC_KEY_PEM_KEY_NAME,
-  TRUST_REGISTRY_API_KEY_NAME,
-  TRUST_REGISTRY_BASE_URL_KEY_NAME,
-  getMasterPublicKeyPem,
-  getTrustRegistryApiKey,
-  getTrustRegistryBaseUrl,
   getKey,
   setKey,
 } from "../../services/secureKeyService";
@@ -38,6 +32,8 @@ interface ShieldDeviceSnapshot {
   hasMasterCert: boolean;
   registerUrl: string | null;
   verifyUrl: string | null;
+  hasApiKey: boolean;
+  hasMasterPublicKey: boolean;
 }
 
 const PROTECTED_ALBUM_NAME = "ThreatLens Protected";
@@ -65,13 +61,6 @@ export const STATUS_META: Record<
   CORRUPT: { label: "Corrupt", color: THEME.colors.danger, icon: "alert-circle" },
 };
 
-export function maskSecret(value: string): string {
-  if (value.length <= 8) {
-    return value;
-  }
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
-}
-
 export function useShieldController() {
   const [mode, setMode] = useState<ShieldMode>("protect");
 
@@ -87,27 +76,17 @@ export function useShieldController() {
   const [verifyCloudCheck, setVerifyCloudCheck] = useState<boolean>(true);
 
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
-  const [settingsSaving, setSettingsSaving] = useState<boolean>(false);
-  const [registryBaseUrl, setRegistryBaseUrl] = useState<string>("");
-  const [registryApiKey, setRegistryApiKey] = useState<string>("");
-  const [masterPublicPem, setMasterPublicPem] = useState<string>("");
   const [protectedExportDirUri, setProtectedExportDirUri] = useState<string | null>(null);
   const [deviceSnapshot, setDeviceSnapshot] = useState<ShieldDeviceSnapshot | null>(null);
 
   const loadSettings = useCallback(async () => {
     setSettingsLoading(true);
     try {
-      const [baseUrl, apiKey, masterPem, snapshot] = await Promise.all([
-        getTrustRegistryBaseUrl(),
-        getTrustRegistryApiKey(),
-        getMasterPublicKeyPem(),
+      const [snapshot] = await Promise.all([
         getImageTrustSettingsSnapshot(),
       ]);
       const savedProtectedDirUri = await getKey(PROTECTED_EXPORT_DIR_URI_KEY);
 
-      setRegistryBaseUrl(baseUrl ?? "");
-      setRegistryApiKey(apiKey ?? "");
-      setMasterPublicPem(masterPem ?? "");
       setDeviceSnapshot(snapshot);
       setProtectedExportDirUri(
         typeof savedProtectedDirUri === "string" && savedProtectedDirUri.trim().length > 0
@@ -296,9 +275,9 @@ export function useShieldController() {
     const marker = "/tree/";
     const index = decoded.indexOf(marker);
     if (index >= 0) {
-      return decoded.slice(index + marker.length);
+      return decoded.slice(index + marker.length).replace(/^primary:\s*/i, "");
     }
-    return decoded;
+    return decoded.replace(/^primary:\s*/i, "");
   }, [protectedExportDirUri]);
 
   const saveToGallery = useCallback(async () => {
@@ -371,26 +350,6 @@ export function useShieldController() {
     }
   }, [getProtectedDirectoryUri, requestProtectedDirectoryUri, signedImageUri]);
 
-  const saveSettings = useCallback(async () => {
-    setSettingsSaving(true);
-    setErrorMessage(null);
-    try {
-      await setKey(TRUST_REGISTRY_BASE_URL_KEY_NAME, registryBaseUrl.trim());
-      await setKey(TRUST_REGISTRY_API_KEY_NAME, registryApiKey.trim());
-      await setKey(MASTER_PUBLIC_KEY_PEM_KEY_NAME, masterPublicPem.trim());
-      await loadSettings();
-      Alert.alert("Saved", "Trust settings updated.");
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : "Could not save trust settings.";
-      setErrorMessage(message);
-    } finally {
-      setSettingsSaving(false);
-    }
-  }, [loadSettings, masterPublicPem, registryApiKey, registryBaseUrl]);
-
   const selectMode = useCallback((nextMode: ShieldMode) => {
     setMode(nextMode);
     setErrorMessage(null);
@@ -402,20 +361,29 @@ export function useShieldController() {
     return "Settings";
   }, [mode]);
 
+  const isAllSet = useMemo(() => {
+    if (!deviceSnapshot) return false;
+    return (
+      deviceSnapshot.registerUrl !== null &&
+      deviceSnapshot.verifyUrl !== null &&
+      deviceSnapshot.hasDeviceKey &&
+      deviceSnapshot.hasMasterCert &&
+      deviceSnapshot.hasApiKey &&
+      deviceSnapshot.hasMasterPublicKey
+    );
+  }, [deviceSnapshot]);
+
   return {
     deviceSnapshot,
     errorMessage,
-    masterPublicPem,
+    isAllSet,
     mode,
     modeTitle,
     protectPayload,
     protectSourceUri,
     protectStep,
     protectedFolderDisplay,
-    registryApiKey,
-    registryBaseUrl,
     settingsLoading,
-    settingsSaving,
     signedImageUri,
     verifyCloudCheck,
     verifyLoading,
@@ -429,12 +397,8 @@ export function useShieldController() {
     resetVerifyState,
     runProtectFlow,
     runVerifyFlow,
-    saveSettings,
     saveToGallery,
     selectMode,
-    setMasterPublicPem,
-    setRegistryApiKey,
-    setRegistryBaseUrl,
     setVerifyCloudCheck,
   };
 }

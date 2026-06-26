@@ -57,16 +57,16 @@ export default function ProtectPanel({
 
       <View style={styles.actionsRow}>
         <Pressable
-          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
           onPress={onPickImage}
         >
-          <Feather name="upload" size={18} color="#0A0F14" />
-          <Text style={styles.primaryButtonText}>Select</Text>
+          <Feather name="upload" size={18} color={THEME.colors.textPrimary} />
+          <Text style={styles.secondaryButtonText}>Select</Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [
-            styles.secondaryButton,
+            styles.primaryButton,
             (!protectSourceUri || protectStep === "signing") && styles.disabledButton,
             pressed && styles.pressedButton,
           ]}
@@ -74,11 +74,11 @@ export default function ProtectPanel({
           onPress={onProtect}
         >
           {protectStep === "signing" ? (
-            <ActivityIndicator size="small" color={THEME.colors.textPrimary} />
+            <ActivityIndicator size="small" color="#0A0F14" />
           ) : (
             <>
-              <Feather name="shield" size={18} color={THEME.colors.textPrimary} />
-              <Text style={styles.secondaryButtonText}>Protect</Text>
+              <Feather name="shield" size={18} color="#0A0F14" />
+              <Text style={styles.primaryButtonText}>Protect</Text>
             </>
           )}
         </Pressable>
@@ -88,8 +88,6 @@ export default function ProtectPanel({
         <View style={styles.resultCard}>
           <Text style={styles.resultTitle}>Signed Payload</Text>
           <Text style={styles.resultLine}>Install: {protectPayload.installID}</Text>
-          <Text style={styles.resultLine}>SHA-256: {protectPayload.sha256.slice(0, 20)}...</Text>
-          <Text style={styles.resultLine}>pHash: {protectPayload.phash}</Text>
           <Text style={styles.resultLine}>
             Signed at: {new Date(protectPayload.timestamp).toLocaleString()}
           </Text>

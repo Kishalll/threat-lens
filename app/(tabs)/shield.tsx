@@ -12,7 +12,6 @@ import ProtectPanel from "../../src/components/shield/ProtectPanel";
 import SettingsPanel from "../../src/components/shield/SettingsPanel";
 import VerifyPanel from "../../src/components/shield/VerifyPanel";
 import {
-  maskSecret,
   STATUS_META,
   type ShieldMode,
   useShieldController,
@@ -24,17 +23,14 @@ export default function ShieldScreen() {
   const {
     deviceSnapshot,
     errorMessage,
-    masterPublicPem,
+    isAllSet,
     mode,
     modeTitle,
     protectPayload,
     protectSourceUri,
     protectStep,
     protectedFolderDisplay,
-    registryApiKey,
-    registryBaseUrl,
     settingsLoading,
-    settingsSaving,
     signedImageUri,
     verifyCloudCheck,
     verifyLoading,
@@ -48,12 +44,8 @@ export default function ShieldScreen() {
     resetVerifyState,
     runProtectFlow,
     runVerifyFlow,
-    saveSettings,
     saveToGallery,
     selectMode,
-    setMasterPublicPem,
-    setRegistryApiKey,
-    setRegistryBaseUrl,
     setVerifyCloudCheck,
   } = useShieldController();
 
@@ -61,7 +53,7 @@ export default function ShieldScreen() {
     <View style={styles.container}>
       <Text style={styles.headerTitle}>Image Shield</Text>
       <Text style={styles.subtitle}>
-        Device-signed image trust with local verification and optional cloud registry checks.
+        Add a Digital Fingerprint to your photos. Verify if an image has been Tampered with.
       </Text>
 
       <View style={styles.modeSwitcher}>
@@ -92,7 +84,7 @@ export default function ShieldScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 96 }}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>{modeTitle} Flow</Text>
+        <Text style={styles.sectionTitle}>{modeTitle} </Text>
 
         {mode === "protect" ? (
           <ProtectPanel
@@ -137,25 +129,15 @@ export default function ShieldScreen() {
           <SettingsPanel
             styles={styles}
             settingsLoading={settingsLoading}
-            settingsSaving={settingsSaving}
-            registryBaseUrl={registryBaseUrl}
-            registryApiKey={registryApiKey}
-            masterPublicPem={masterPublicPem}
             protectedFolderDisplay={protectedFolderDisplay}
             deviceSnapshot={deviceSnapshot}
-            onChangeRegistryBaseUrl={setRegistryBaseUrl}
-            onChangeRegistryApiKey={setRegistryApiKey}
-            onChangeMasterPublicPem={setMasterPublicPem}
-            onSaveSettings={() => {
-              void saveSettings();
-            }}
+            isAllSet={isAllSet}
             onChangeFolder={() => {
               void changeProtectedFolder();
             }}
             onResetFolder={() => {
               void resetProtectedFolder();
             }}
-            maskSecret={maskSecret}
           />
         ) : null}
 
@@ -291,7 +273,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   folderManagementCard: {
-    marginTop: 14,
+    marginTop: 2,
     borderWidth: 1,
     borderColor: THEME.colors.borderStrong,
     borderRadius: THEME.radius.md,

@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { THEME } from "../../constants/theme";
@@ -10,43 +10,32 @@ interface DeviceSnapshot {
   hasMasterCert: boolean;
   registerUrl: string | null;
   verifyUrl: string | null;
+  hasApiKey: boolean;
+  hasMasterPublicKey: boolean;
 }
 
 interface SettingsPanelProps {
   styles: any;
   settingsLoading: boolean;
-  settingsSaving: boolean;
-  registryBaseUrl: string;
-  registryApiKey: string;
-  masterPublicPem: string;
   protectedFolderDisplay: string;
   deviceSnapshot: DeviceSnapshot | null;
-  onChangeRegistryBaseUrl: (value: string) => void;
-  onChangeRegistryApiKey: (value: string) => void;
-  onChangeMasterPublicPem: (value: string) => void;
-  onSaveSettings: () => void;
+  isAllSet: boolean;
   onChangeFolder: () => void;
   onResetFolder: () => void;
-  maskSecret: (value: string) => string;
 }
 
 export default function SettingsPanel({
   styles,
   settingsLoading,
-  settingsSaving,
-  registryBaseUrl,
-  registryApiKey,
-  masterPublicPem,
   protectedFolderDisplay,
   deviceSnapshot,
-  onChangeRegistryBaseUrl,
-  onChangeRegistryApiKey,
-  onChangeMasterPublicPem,
-  onSaveSettings,
+  isAllSet,
   onChangeFolder,
   onResetFolder,
-  maskSecret,
 }: SettingsPanelProps) {
+  const okColor = THEME.colors.accent;
+  const badColor = THEME.colors.danger;
+
   return (
     <View style={styles.card}>
       {settingsLoading ? (
@@ -56,60 +45,10 @@ export default function SettingsPanel({
         </View>
       ) : (
         <>
-          <Text style={styles.inputLabel}>Trust Registry Base URL</Text>
-          <TextInput
-            style={styles.input}
-            value={registryBaseUrl}
-            onChangeText={onChangeRegistryBaseUrl}
-            autoCapitalize="none"
-            placeholder="https://region-project.cloudfunctions.net"
-            placeholderTextColor={THEME.colors.textTertiary}
-          />
-
-          <Text style={styles.inputLabel}>Registry API Key</Text>
-          <TextInput
-            style={styles.input}
-            value={registryApiKey}
-            onChangeText={onChangeRegistryApiKey}
-            autoCapitalize="none"
-            placeholder="Optional bearer token"
-            placeholderTextColor={THEME.colors.textTertiary}
-          />
-
-          <Text style={styles.inputLabel}>Master Public Key (PEM)</Text>
-          <TextInput
-            style={[styles.input, styles.multiInput]}
-            value={masterPublicPem}
-            onChangeText={onChangeMasterPublicPem}
-            autoCapitalize="none"
-            multiline
-            placeholder="-----BEGIN PUBLIC KEY-----"
-            placeholderTextColor={THEME.colors.textTertiary}
-          />
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              settingsSaving && styles.disabledButton,
-              pressed && styles.pressedButton,
-            ]}
-            disabled={settingsSaving}
-            onPress={onSaveSettings}
-          >
-            {settingsSaving ? (
-              <ActivityIndicator size="small" color="#0A0F14" />
-            ) : (
-              <>
-                <Feather name="save" size={18} color="#0A0F14" />
-                <Text style={styles.primaryButtonText}>Save Settings</Text>
-              </>
-            )}
-          </Pressable>
-
           {Platform.OS === "android" ? (
             <View style={styles.folderManagementCard}>
               <Text style={styles.resultTitle}>Protected Export Folder</Text>
-              <Text style={styles.resultLine}>{protectedFolderDisplay}</Text>
+              <Text style={[styles.resultLine, { fontSize: 15, color: THEME.colors.textPrimary }]}>{protectedFolderDisplay}</Text>
               <View style={styles.settingsActionsRow}>
                 <Pressable
                   style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
@@ -130,26 +69,48 @@ export default function SettingsPanel({
           ) : null}
 
           {deviceSnapshot ? (
-            <View style={styles.snapshotCard}>
-              <Text style={styles.resultTitle}>Device Trust State</Text>
+            <View
+              style={[
+                styles.snapshotCard,
+                { borderColor: isAllSet ? okColor : badColor },
+              ]}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <Text style={styles.resultTitle}>Device Trust State</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: isAllSet ? `${okColor}22` : `${badColor}22`,
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: THEME.radius.pill,
+                    borderWidth: 1,
+                    borderColor: isAllSet ? `${okColor}66` : `${badColor}66`,
+                  }}
+                >
+                  <Feather name={isAllSet ? "check-circle" : "alert-circle"} size={12} color={isAllSet ? okColor : badColor} />
+                  <Text style={{ color: isAllSet ? okColor : badColor, fontSize: 11, fontWeight: "700", fontFamily: THEME.fontFamily.dmSans }}>
+                    {isAllSet ? "All Set" : "Needs Action"}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.resultLine}>
-                Install ID: {deviceSnapshot.installID ?? "Not generated"}
+                Install ID: <Text style={{ color: deviceSnapshot.installID ? okColor : badColor }}>{deviceSnapshot.installID ?? "Not generated"}</Text>
               </Text>
               <Text style={styles.resultLine}>
-                Device key: {deviceSnapshot.hasDeviceKey ? "Present" : "Missing"}
+                Device key: <Text style={{ color: deviceSnapshot.hasDeviceKey ? okColor : badColor }}>{deviceSnapshot.hasDeviceKey ? "Present" : "Missing"}</Text>
               </Text>
               <Text style={styles.resultLine}>
-                Master cert: {deviceSnapshot.hasMasterCert ? "Present" : "Missing"}
+                Master cert: <Text style={{ color: deviceSnapshot.hasMasterCert ? okColor : badColor }}>{deviceSnapshot.hasMasterCert ? "Present" : "Missing"}</Text>
               </Text>
               <Text style={styles.resultLine}>
-                Register URL: {deviceSnapshot.registerUrl ?? "Not configured"}
+                API key: <Text style={{ color: deviceSnapshot.hasApiKey ? okColor : badColor }}>{deviceSnapshot.hasApiKey ? "Present" : "Missing"}</Text>
               </Text>
               <Text style={styles.resultLine}>
-                Verify URL: {deviceSnapshot.verifyUrl ?? "Not configured"}
+                Master public key: <Text style={{ color: deviceSnapshot.hasMasterPublicKey ? okColor : badColor }}>{deviceSnapshot.hasMasterPublicKey ? "Present" : "Missing"}</Text>
               </Text>
-              {registryApiKey.trim().length > 0 ? (
-                <Text style={styles.resultLine}>API key: {maskSecret(registryApiKey.trim())}</Text>
-              ) : null}
             </View>
           ) : null}
         </>

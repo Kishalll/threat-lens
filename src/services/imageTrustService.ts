@@ -814,12 +814,16 @@ export async function getImageTrustSettingsSnapshot(): Promise<{
   hasMasterCert: boolean;
   registerUrl: string | null;
   verifyUrl: string | null;
+  hasApiKey: boolean;
+  hasMasterPublicKey: boolean;
 }> {
   const installID = await getSecureItem(DEVICE_INSTALL_ID_KEY);
   const hasDeviceKey = Boolean(await getSecureItem(DEVICE_PRIVATE_KEY_KEY));
   const hasMasterCert = Boolean(await getSecureItem(DEVICE_MASTER_CERT_KEY));
   const registerUrl = await getRegisterEndpointUrl();
   const verifyUrl = await getVerifyEndpointUrl();
+  const apiKey = await getTrustRegistryApiKey();
+  const masterPem = await getMasterPublicKeyPem();
 
   return {
     installID,
@@ -827,6 +831,8 @@ export async function getImageTrustSettingsSnapshot(): Promise<{
     hasMasterCert,
     registerUrl,
     verifyUrl,
+    hasApiKey: typeof apiKey === "string" && apiKey.length > 0,
+    hasMasterPublicKey: typeof masterPem === "string" && masterPem.length > 0,
   };
 }
 

@@ -68,16 +68,16 @@ export default function VerifyPanel({
 
       <View style={styles.actionsRow}>
         <Pressable
-          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedButton]}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
           onPress={onPickImage}
         >
-          <Feather name="upload" size={18} color="#0A0F14" />
-          <Text style={styles.primaryButtonText}>Select</Text>
+          <Feather name="upload" size={18} color={THEME.colors.textPrimary} />
+          <Text style={styles.secondaryButtonText}>Select</Text>
         </Pressable>
 
         <Pressable
           style={({ pressed }) => [
-            styles.secondaryButton,
+            styles.primaryButton,
             (!verifySourceUri || verifyLoading) && styles.disabledButton,
             pressed && styles.pressedButton,
           ]}
@@ -85,11 +85,11 @@ export default function VerifyPanel({
           onPress={onVerify}
         >
           {verifyLoading ? (
-            <ActivityIndicator size="small" color={THEME.colors.textPrimary} />
+            <ActivityIndicator size="small" color="#0A0F14" />
           ) : (
             <>
-              <Feather name="check-square" size={18} color={THEME.colors.textPrimary} />
-              <Text style={styles.secondaryButtonText}>Verify</Text>
+              <Feather name="check-square" size={18} color="#0A0F14" />
+              <Text style={styles.primaryButtonText}>Verify</Text>
             </>
           )}
         </Pressable>
@@ -114,19 +114,19 @@ export default function VerifyPanel({
           </View>
           <Text style={styles.resultLine}>{verifyResult.summary}</Text>
           <Text style={styles.resultLine}>
-            Hash check: {verifyResult.checks.hashCheck ? "PASS" : "FAIL"}
+            Hash check: <Text style={{ color: verifyResult.checks.hashCheck ? THEME.colors.accent : THEME.colors.danger }}>{verifyResult.checks.hashCheck ? "PASS" : "FAIL"}</Text>
           </Text>
           <Text style={styles.resultLine}>
-            Signature check: {verifyResult.checks.signatureCheck ? "PASS" : "FAIL"}
+            Signature check: <Text style={{ color: verifyResult.checks.signatureCheck ? THEME.colors.accent : THEME.colors.danger }}>{verifyResult.checks.signatureCheck ? "PASS" : "FAIL"}</Text>
           </Text>
           <Text style={styles.resultLine}>
-            Master cert check: {verifyResult.checks.masterCertCheck ? "PASS" : "FAIL"}
+            Master cert check: <Text style={{ color: verifyResult.checks.masterCertCheck ? THEME.colors.accent : THEME.colors.danger }}>{verifyResult.checks.masterCertCheck ? "PASS" : "FAIL"}</Text>
           </Text>
           <Text style={styles.resultLine}>
-            Cloud check: {verifyResult.checks.cloudCheck.toUpperCase()}
+            Cloud check: <Text style={{ color: verifyResult.checks.cloudCheck === "passed" ? THEME.colors.accent : verifyResult.checks.cloudCheck === "failed" ? THEME.colors.danger : verifyResult.checks.cloudCheck === "offline" ? THEME.colors.warning : THEME.colors.textTertiary }}>{verifyResult.checks.cloudCheck.toUpperCase()}</Text>
           </Text>
           {typeof verifyResult.pHashDistance === "number" ? (
-            <Text style={styles.resultLine}>pHash distance: {verifyResult.pHashDistance}</Text>
+            <Text style={styles.resultLine}>pHash distance: <Text style={{ color: verifyResult.pHashDistance <= 8 ? THEME.colors.accent : THEME.colors.danger }}>{verifyResult.pHashDistance}</Text></Text>
           ) : null}
           {verifyResult.details.map((detail) => (
             <Text key={detail} style={styles.detailLine}>
