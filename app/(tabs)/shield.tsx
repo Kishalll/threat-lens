@@ -16,10 +16,12 @@ import {
   type ShieldMode,
   useShieldController,
 } from "../../src/components/shield/useShieldController";
+import { useToast } from "../../src/hooks/useToast";
 import { THEME } from "../../src/constants/theme";
 
 export default function ShieldScreen() {
   const insets = useSafeAreaInsets();
+  const { showToast, ToastComponent } = useToast();
   const {
     deviceSnapshot,
     errorMessage,
@@ -47,7 +49,7 @@ export default function ShieldScreen() {
     saveToGallery,
     selectMode,
     setVerifyCloudCheck,
-  } = useShieldController();
+  } = useShieldController(showToast);
 
   return (
     <View style={styles.container}>
@@ -148,6 +150,7 @@ export default function ShieldScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {ToastComponent}
     </View>
   );
 }

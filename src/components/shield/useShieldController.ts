@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
@@ -22,6 +22,7 @@ import {
 } from "../../services/secureKeyService";
 import { THEME } from "../../constants/theme";
 import { log } from "../../utils/activityLog";
+import type { ToastVariant } from "../../hooks/useToast";
 
 export type ShieldMode = "protect" | "verify" | "settings";
 type ProtectStep = "idle" | "picked" | "signing" | "done" | "error";
@@ -61,7 +62,7 @@ export const STATUS_META: Record<
   CORRUPT: { label: "Corrupt", color: THEME.colors.danger, icon: "alert-circle" },
 };
 
-export function useShieldController() {
+export function useShieldController(showToast: (msg: string, variant?: ToastVariant) => void) {
   const [mode, setMode] = useState<ShieldMode>("protect");
 
   const [protectSourceUri, setProtectSourceUri] = useState<string | null>(null);
@@ -247,24 +248,23 @@ export function useShieldController() {
     try {
       const directoryUri = await requestProtectedDirectoryUri();
       if (!directoryUri) {
-        Alert.alert("Folder Not Changed", "No folder selected.");
         return;
       }
-      Alert.alert("Updated", "Protected folder updated.");
+      showToast("Protected folder updated.", "success");
     } catch {
-      Alert.alert("Update Failed", "Could not change protected folder.");
+      showToast("Could not change protected folder.", "error");
     }
-  }, [requestProtectedDirectoryUri]);
+  }, [requestProtectedDirectoryUri, showToast]);
 
   const resetProtectedFolder = useCallback(async () => {
     try {
       await setKey(PROTECTED_EXPORT_DIR_URI_KEY, "");
       setProtectedExportDirUri(null);
-      Alert.alert("Reset", "Protected folder selection cleared.");
+      showToast("Protected folder selection cleared.", "success");
     } catch {
-      Alert.alert("Reset Failed", "Could not reset protected folder.");
+      showToast("Could not reset protected folder.", "error");
     }
-  }, []);
+  }, [showToast]);
 
   const protectedFolderDisplay = useMemo(() => {
     if (!protectedExportDirUri) {
@@ -306,10 +306,7 @@ export function useShieldController() {
       if (Platform.OS === "android") {
         let directoryUri = await getProtectedDirectoryUri();
         if (!directoryUri) {
-          Alert.alert(
-            "Folder Required",
-            "Choose a folder (recommended: ThreatLens Protected) to save signed images."
-          );
+          showToast("Choose a folder to save signed images.", "error");
           return;
         }
 
@@ -318,14 +315,14 @@ export function useShieldController() {
         } catch {
           directoryUri = await requestProtectedDirectoryUri();
           if (!directoryUri) {
-            Alert.alert("Folder Required", "Choose a folder to save signed images.");
+            showToast("Choose a folder to save signed images.", "error");
             return;
           }
 
           await saveWithStorageAccessFramework(directoryUri);
         }
 
-        Alert.alert("Saved", "Signed image saved to your selected protected folder.");
+        showToast("Signed image saved to your protected folder.", "success");
         return;
       }
 
@@ -341,14 +338,14 @@ export function useShieldController() {
           await MediaLibrary.createAlbumAsync(PROTECTED_ALBUM_NAME, asset, false);
         }
 
-        Alert.alert("Saved", `Signed image saved to '${PROTECTED_ALBUM_NAME}' album.`);
+        showToast(`Signed image saved to '${PROTECTED_ALBUM_NAME}' album.`, "success");
       } else {
-        Alert.alert("Permission Required", "Allow gallery permission to save image.");
+        showToast("Allow gallery permission to save image.", "error");
       }
     } catch {
-      Alert.alert("Save Failed", "Could not save signed image.");
+      showToast("Could not save signed image.", "error");
     }
-  }, [getProtectedDirectoryUri, requestProtectedDirectoryUri, signedImageUri]);
+  }, [getProtectedDirectoryUri, requestProtectedDirectoryUri, signedImageUri, showToast]);
 
   const selectMode = useCallback((nextMode: ShieldMode) => {
     setMode(nextMode);
