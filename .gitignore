@@ -26,6 +26,8 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 HANDOVER.md
+docs/image-protection-analysis.md
+handover.md
 # macOS
 .DS_Store
 *.pem
