@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "threatlens_trust_registry"
-database_id = "d2909a37-bc4d-43b7-915e-111d0a218b05" # Will be filled after creating D1 database
+database_id = "9c724f1c-be59-4891-b054-d7ba76f0c004"
 
 # Workers for each endpoint
 [[workers]]

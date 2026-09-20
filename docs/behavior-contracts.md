@@ -161,6 +161,9 @@ The Shield area remains exactly:
 - Registry base URL, registry API key, and master public key remain editable.
 - Settings load from secure storage and save back to secure storage.
 - Device trust snapshot remains visible when available.
+- `src/services/secureKeyService.ts` resolves endpoints across Cloudflare Worker subdomains (`threatlens-register`, `threatlens-verify`, and `threatlens-image`) as well as path-based URLs (`/register`, `/verify`, `/image`).
+- Explicit environment overrides (`EXPO_PUBLIC_TRUST_REGISTRY_REGISTER_URL`, `EXPO_PUBLIC_TRUST_REGISTRY_VERIFY_URL`, and `EXPO_PUBLIC_TRUST_REGISTRY_IMAGE_URL`) take precedence when set.
+- Remote Cloudflare D1 database maintains two tables: `trust_registry` for device identities and `image_registry` for DCT-watermarked image payloads.
 
 ### Android Protected Folder Behavior
 

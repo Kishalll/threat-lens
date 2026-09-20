@@ -99,52 +99,54 @@ export async function getMasterPublicKeyPem(): Promise<string | null> {
   return null;
 }
 
+function resolveWorkerUrl(base: string, target: "register" | "verify" | "image"): string {
+  // Handles individual workers.dev subdomains (e.g. threatlens-register.xxx.workers.dev)
+  if (
+    base.includes("threatlens-register") ||
+    base.includes("threatlens-verify") ||
+    base.includes("threatlens-image")
+  ) {
+    return base
+      .replace("threatlens-register", `threatlens-${target}`)
+      .replace("threatlens-verify", `threatlens-${target}`)
+      .replace("threatlens-image", `threatlens-${target}`);
+  }
+
+  // Handles path-based base URLs (e.g. https://domain.com/trust)
+  const clean = base.replace(/\/+(register|verify|image)$/, "");
+  return `${clean}/${target}`;
+}
+
 export async function getRegisterEndpointUrl(): Promise<string | null> {
+  const envUrl = process.env.EXPO_PUBLIC_TRUST_REGISTRY_REGISTER_URL;
+  if (envUrl && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
   const base = await getTrustRegistryBaseUrl();
-  if (!base) {
-    return null;
-  }
-  if (base.endsWith("/register")) {
-    return base;
-  }
-  if (base.endsWith("/verify")) {
-    return `${base.slice(0, -"/verify".length)}/register`;
-  }
-  return `${base}/register`;
+  if (!base) return null;
+  return resolveWorkerUrl(base, "register");
 }
 
 export async function getVerifyEndpointUrl(): Promise<string | null> {
+  const envUrl = process.env.EXPO_PUBLIC_TRUST_REGISTRY_VERIFY_URL;
+  if (envUrl && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
   const base = await getTrustRegistryBaseUrl();
-  if (!base) {
-    return null;
-  }
-  if (base.endsWith("/verify")) {
-    return base;
-  }
-  if (base.endsWith("/register")) {
-    return `${base.slice(0, -"/register".length)}/verify`;
-  }
-  if (base.endsWith("/image")) {
-    return `${base.slice(0, -"/image".length)}/verify`;
-  }
-  return `${base}/verify`;
+  if (!base) return null;
+  return resolveWorkerUrl(base, "verify");
 }
 
 export async function getImageEndpointUrl(): Promise<string | null> {
+  const envUrl =
+    process.env.EXPO_PUBLIC_TRUST_REGISTRY_IMAGE_URL ||
+    process.env.EXPO_PUBLIC_IMAGE_REGISTRY_URL;
+  if (envUrl && envUrl.trim().length > 0) {
+    return envUrl.trim().replace(/\/+$/, "");
+  }
   const base = await getTrustRegistryBaseUrl();
-  if (!base) {
-    return null;
-  }
-  if (base.endsWith("/image")) {
-    return base;
-  }
-  if (base.endsWith("/register")) {
-    return `${base.slice(0, -"/register".length)}/image`;
-  }
-  if (base.endsWith("/verify")) {
-    return `${base.slice(0, -"/verify".length)}/image`;
-  }
-  return `${base}/image`;
+  if (!base) return null;
+  return resolveWorkerUrl(base, "image");
 }
 
 // Ensure defaults for mock environment
