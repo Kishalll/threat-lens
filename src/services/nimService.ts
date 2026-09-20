@@ -11,15 +11,14 @@ import type { BreachGuidance, ScanResult } from "../types";
 
 // Scanner: needs strong multilingual + Indian-context classification accuracy
 const SCANNER_MODELS = [
-  "meta/llama-3.1-8b-instruct",
-  "meta/llama-3.3-70b-instruct",            // primary — best multilingual instruction following
-  "nv-mistralai/mistral-nemo-12b-instruct", // fallback
+  "meta/llama-3.2-11b-vision-instruct",     // primary: fast, high quality multilingual and Indian context
+  "mistralai/mistral-nemotron",             // fallback
 ];
 
 // Breach guidance: longer-form generation, lower latency preferable
 const BREACH_MODELS = [
-  "meta/llama-3.1-8b-instruct",             // primary — fast, sufficient for guidance text
-  "nv-mistralai/mistral-nemo-12b-instruct", // fallback
+  "meta/llama-3.2-11b-vision-instruct",     // primary: reliable JSON output and guidance steps
+  "mistralai/mistral-nemotron",             // fallback
 ];
 
 const MODEL_BACKOFF_DEFAULT_MS = 60_000;
@@ -182,7 +181,15 @@ async function getNIMClient(): Promise<OpenAI> {
 function isModelUnavailableError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const m = error.message.toLowerCase();
-  return m.includes("404") || m.includes("is not found") || m.includes("not supported") || m.includes("unsupported parameter") || m.includes("400 validation");
+  return (
+    m.includes("404") ||
+    m.includes("410") ||
+    m.includes("gone") ||
+    m.includes("is not found") ||
+    m.includes("not supported") ||
+    m.includes("unsupported parameter") ||
+    m.includes("400 validation")
+  );
 }
 
 function isQuotaOrRateLimitError(error: unknown): boolean {

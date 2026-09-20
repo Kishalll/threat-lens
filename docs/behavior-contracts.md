@@ -28,6 +28,8 @@ Unless the user explicitly changes product behavior, refactors must preserve the
   - `PHISHING`
   - `UNAVAILABLE`
 - `src/services/nimService.ts` remains the source of truth for classifier behavior and guardrails.
+- NIM execution uses `meta/llama-3.2-11b-vision-instruct` as primary and `mistralai/mistral-nemotron` as fallback.
+- Deprecated or unavailable models (HTTP 410 or 404) trigger automatic fallback to the next configured model.
 - `SAFE` and `PROMO` results must carry no red flags and no suggested actions.
 - `UNAVAILABLE` means AI analysis degraded or could not run; it must not be silently converted into any threat class.
 
