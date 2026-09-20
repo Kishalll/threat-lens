@@ -6,6 +6,7 @@ export type VerificationStatus =
   | "REVOKED"
   | "OFFLINE"
   | "NO_PROTECTION"
+  | "INTEGRITY_VERIFIED"
   | "CORRUPT";
 
 export interface SignedImagePayload {
@@ -21,6 +22,7 @@ export interface SignedImagePayload {
   masterCert: string;
   signature: string;
   cloudVerifyURL: string;
+  watermarkId?: string;
 }
 
 export interface VerificationChecks {
@@ -34,6 +36,7 @@ export interface VerificationResult {
   status: VerificationStatus;
   summary: string;
   payload?: SignedImagePayload;
+  watermarkId?: string;
   checks: VerificationChecks;
   details: string[];
   shaMatch?: boolean;

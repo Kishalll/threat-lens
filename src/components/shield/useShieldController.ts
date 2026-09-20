@@ -59,6 +59,11 @@ export const STATUS_META: Record<
     color: THEME.colors.textTertiary,
     icon: "help-circle",
   },
+  INTEGRITY_VERIFIED: {
+    label: "Intact (Offline)",
+    color: THEME.colors.warning,
+    icon: "check",
+  },
   CORRUPT: { label: "Corrupt", color: THEME.colors.danger, icon: "alert-circle" },
 };
 
@@ -195,7 +200,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       });
       setVerifyResult(result);
 
-      if (result.status === "AUTHENTIC") {
+      if (result.status === "AUTHENTIC" || result.status === "INTEGRITY_VERIFIED") {
         log("img_verified", result.summary);
       } else {
         log("img_verify_fail", result.summary);

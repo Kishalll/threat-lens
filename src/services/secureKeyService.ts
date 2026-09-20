@@ -16,6 +16,10 @@ function normalizeTrustBaseUrl(value: string): string {
     normalized = normalized.slice(0, -"/verify".length);
   }
 
+  if (normalized.endsWith("/image")) {
+    normalized = normalized.slice(0, -"/image".length);
+  }
+
   return normalized;
 }
 
@@ -120,7 +124,27 @@ export async function getVerifyEndpointUrl(): Promise<string | null> {
   if (base.endsWith("/register")) {
     return `${base.slice(0, -"/register".length)}/verify`;
   }
+  if (base.endsWith("/image")) {
+    return `${base.slice(0, -"/image".length)}/verify`;
+  }
   return `${base}/verify`;
+}
+
+export async function getImageEndpointUrl(): Promise<string | null> {
+  const base = await getTrustRegistryBaseUrl();
+  if (!base) {
+    return null;
+  }
+  if (base.endsWith("/image")) {
+    return base;
+  }
+  if (base.endsWith("/register")) {
+    return `${base.slice(0, -"/register".length)}/image`;
+  }
+  if (base.endsWith("/verify")) {
+    return `${base.slice(0, -"/verify".length)}/image`;
+  }
+  return `${base}/image`;
 }
 
 // Ensure defaults for mock environment

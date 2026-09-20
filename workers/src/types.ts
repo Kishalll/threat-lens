@@ -70,3 +70,22 @@ export interface VerifyResponse {
 export interface ErrorResponse {
   error: string;
 }
+
+export interface ImageStoreRequest {
+  watermarkId: string;
+  payload: Record<string, unknown>;
+}
+
+export interface ImageStoreResponse {
+  ok: boolean;
+  watermarkId: string;
+  storedAt: string;
+}
+
+export interface ImageLookupResponse {
+  ok: boolean;
+  watermarkId: string;
+  payload?: Record<string, unknown>;
+  createdAt?: string;
+  error?: string;
+}

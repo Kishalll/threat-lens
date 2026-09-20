@@ -129,18 +129,23 @@ The Shield area remains exactly:
 ### Protect Flow
 
 - User selects an image from the media library.
-- App signs the image via `src/services/imageTrustService.ts`.
-- A signed payload is embedded in the output image.
+- App embeds a 128-bit DCT watermark into the image luminance frequencies (64-bit lookup nonce + 64-bit perceptual hash) with a sync prefix via `src/services/imageTrustService.ts`.
+- App creates a signed payload with device identity, master certificate, and hashes, then uploads it to the cloud registry.
+- EXIF metadata is not used for storing protection payloads.
 - Successful protect flow increments the dashboard protected-image count.
-- User can save the signed image.
+- User can save the watermarked image.
 
 ### Verify Flow
 
 - User selects an image.
-- App verifies local cryptographic integrity.
-- Optional cloud revocation check remains user-toggleable.
-- Verification states remain:
+- App extracts the DCT watermark from image frequencies.
+- If no valid watermark or sync prefix is found, status is `NO_PROTECTION`.
+- Local check compares the extracted perceptual hash with the current image pixels to detect visual tampering.
+- If pixels are intact but cloud check is skipped or offline, status is `INTEGRITY_VERIFIED`.
+- Cloud lookup retrieves the device identity and signed payload to verify ECDSA signature, master certificate, and revocation status.
+- Verification states include:
   - `AUTHENTIC`
+  - `INTEGRITY_VERIFIED`
   - `TAMPERED`
   - `INVALID_SIGNATURE`
   - `CLONE_APP`

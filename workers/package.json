@@ -7,9 +7,11 @@
     "deploy": "wrangler deploy",
     "deploy:register": "wrangler deploy --name threatlens-register --entry-point src/register.ts",
     "deploy:verify": "wrangler deploy --name threatlens-verify --entry-point src/verify.ts",
+    "deploy:image": "wrangler deploy --name threatlens-image --entry-point src/image.ts",
     "dev": "wrangler dev",
     "tail:register": "wrangler tail threatlens-register",
-    "tail:verify": "wrangler tail threatlens-verify"
+    "tail:verify": "wrangler tail threatlens-verify",
+    "tail:image": "wrangler tail threatlens-image"
   },
   "keywords": [
     "cloudflare",

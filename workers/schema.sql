@@ -16,3 +16,13 @@ CREATE TABLE IF NOT EXISTS trust_registry (
 CREATE INDEX IF NOT EXISTS idx_publicKey ON trust_registry(publicKey);
 CREATE INDEX IF NOT EXISTS idx_revoked ON trust_registry(revoked);
 CREATE INDEX IF NOT EXISTS idx_updatedAt ON trust_registry(updatedAt);
+
+-- ThreatLens Image Registry Schema for DCT-watermarked images
+CREATE TABLE IF NOT EXISTS image_registry (
+  watermarkId TEXT PRIMARY KEY,
+  installID TEXT NOT NULL,
+  payloadJson TEXT NOT NULL,
+  createdAt TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_image_installID ON image_registry(installID);

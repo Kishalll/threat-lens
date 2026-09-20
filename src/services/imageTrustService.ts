@@ -1,4 +1,6 @@
 import "react-native-get-random-values";
+import { Buffer } from "buffer";
+globalThis.Buffer = globalThis.Buffer ?? Buffer;
 
 import * as SecureStore from "expo-secure-store";
 import * as FileSystem from "expo-file-system/legacy";
@@ -11,7 +13,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 import { fromByteArray, toByteArray } from "base64-js";
 import jpeg from "jpeg-js";
-import piexif from "piexifjs";
+import { embedDctWatermark, extractDctWatermark } from "../utils/dctWatermark";
 
 import type {
   ProtectResult,
@@ -20,6 +22,7 @@ import type {
   VerificationResult,
 } from "../types/imageTrust";
 import {
+  getImageEndpointUrl,
   getMasterPublicKeyPem,
   getRegisterEndpointUrl,
   getTrustRegistryApiKey,
@@ -68,7 +71,6 @@ const DEVICE_PUBLIC_KEY_KEY = "THREATLENS_DEVICE_PUBLIC_KEY_B64";
 const DEVICE_MASTER_CERT_KEY = "THREATLENS_DEVICE_MASTER_CERT";
 const DEVICE_VERIFY_URL_KEY = "THREATLENS_DEVICE_VERIFY_URL";
 
-const EXIF_DESCRIPTION_PREFIX = "THREATLENS_SIG_V1:";
 const PHASH_TAMPER_THRESHOLD = 8;
 
 interface DeviceIdentity {
@@ -157,6 +159,7 @@ function getUnsignedPayload(payload: SignedImagePayload): Omit<SignedImagePayloa
     publicKey: payload.publicKey,
     masterCert: payload.masterCert,
     cloudVerifyURL: payload.cloudVerifyURL,
+    watermarkId: payload.watermarkId,
   };
 }
 
@@ -552,132 +555,100 @@ async function normalizeToJpegBase64(imageUri: string): Promise<{ base64: string
   };
 }
 
-function payloadToExifField(payload: SignedImagePayload): string {
-  const encoded = bytesToBase64(encodeUtf8(canonicalJson(payload)));
-  return `${EXIF_DESCRIPTION_PREFIX}${encoded}`;
-}
+async function embedDctAndSaveImage(base64Jpeg: string, watermarkId: string): Promise<string> {
+  const imageBytes = base64ToBytes(base64Jpeg);
+  const decoded = jpeg.decode(imageBytes, { useTArray: true, formatAsRGBA: true });
+  const embedResult = embedDctWatermark(decoded.data, decoded.width, decoded.height, watermarkId);
 
-function parsePayloadField(description: string): SignedImagePayload | null {
-  if (!description.startsWith(EXIF_DESCRIPTION_PREFIX)) {
-    return null;
+  if (!embedResult.success) {
+    throw new Error(embedResult.error || "Failed to embed DCT watermark into image");
   }
 
-  const encoded = description.slice(EXIF_DESCRIPTION_PREFIX.length);
-  if (!encoded) {
-    return null;
-  }
-
-  const decoded = decodeUtf8(base64ToBytes(encoded));
-  const parsed = parseJsonSafe<SignedImagePayload>(decoded);
-  if (!parsed) {
-    return null;
-  }
-
-  const requiredKeys: Array<keyof SignedImagePayload> = [
-    "v",
-    "installID",
-    "deviceModel",
-    "appVersion",
-    "appBuildNumber",
-    "timestamp",
-    "sha256",
-    "phash",
-    "publicKey",
-    "masterCert",
-    "signature",
-    "cloudVerifyURL",
-  ];
-
-  for (const key of requiredKeys) {
-    if (!(key in parsed)) {
-      return null;
-    }
-  }
-
-  return parsed;
-}
-
-function extractDescriptionTag(exifLoaded: Record<string, unknown>): string | null {
-  const zeroth = exifLoaded["0th"] as Record<string, unknown> | undefined;
-  if (!zeroth) {
-    return null;
-  }
-
-  const descriptionTag = (piexif as { ImageIFD: { ImageDescription: number } }).ImageIFD.ImageDescription;
-  const rawDescription = zeroth[descriptionTag as unknown as string] ?? zeroth[String(descriptionTag)];
-
-  if (typeof rawDescription === "string") {
-    return rawDescription;
-  }
-
-  if (Array.isArray(rawDescription)) {
-    return String.fromCharCode(...rawDescription.filter((v): v is number => typeof v === "number"));
-  }
-
-  return null;
-}
-
-async function embedSignedPayload(base64Jpeg: string, payload: SignedImagePayload): Promise<string> {
-  const exifField = payloadToExifField(payload);
-  const piexifAny = piexif as {
-    dump: (value: unknown) => string;
-    insert: (exifBytes: string, jpegData: string) => string;
-    ImageIFD: { ImageDescription: number };
-  };
-
-  const exifObject = {
-    "0th": {
-      [piexifAny.ImageIFD.ImageDescription]: exifField,
-    },
-    Exif: {},
-    GPS: {},
-    Interop: {},
-    "1st": {},
-    thumbnail: null,
-  };
-
-  const exifBytes = piexifAny.dump(exifObject);
-  const dataUrl = `data:image/jpeg;base64,${base64Jpeg}`;
-  const resultDataUrl = piexifAny.insert(exifBytes, dataUrl);
-  const rawBase64 = resultDataUrl.includes(",")
-    ? resultDataUrl.split(",", 2)[1]
-    : resultDataUrl;
+  const encoded = jpeg.encode(
+    { data: embedResult.modifiedRgba, width: decoded.width, height: decoded.height },
+    95
+  );
 
   const cacheDir = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
   if (!cacheDir) {
-    throw new Error("No writable cache directory for signed image.");
+    throw new Error("No writable cache directory for protected image.");
   }
 
-  const outputUri = `${cacheDir}signed_${Date.now()}.jpg`;
-  await FileSystem.writeAsStringAsync(outputUri, rawBase64, {
+  const outputUri = `${cacheDir}protected_${Date.now()}.jpg`;
+  const base64Out = bytesToBase64(encoded.data);
+  await FileSystem.writeAsStringAsync(outputUri, base64Out, {
     encoding: FileSystem.EncodingType.Base64,
   });
 
   return outputUri;
 }
 
-async function readSignedPayloadFromImage(imageUri: string): Promise<{ payload: SignedImagePayload | null; base64: string }> {
-  const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+async function storeImagePayloadInCloud(payload: SignedImagePayload): Promise<boolean> {
+  const imageUrl = await getImageEndpointUrl();
+  if (!imageUrl) return false;
 
-  const piexifAny = piexif as {
-    load: (jpegData: string) => Record<string, unknown>;
+  const apiKey = await getTrustRegistryApiKey();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
   };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
 
   try {
-    const exifLoaded = piexifAny.load(`data:image/jpeg;base64,${base64Image}`);
-    const description = extractDescriptionTag(exifLoaded);
-    if (!description) {
-      return { payload: null, base64: base64Image };
+    const res = await fetch(`${imageUrl}/store`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        watermarkId: payload.watermarkId,
+        payload,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function lookupImagePayloadFromCloud(watermarkId: string): Promise<{
+  status: "found" | "not_found" | "offline";
+  payload?: SignedImagePayload;
+  error?: string;
+}> {
+  const imageUrl = await getImageEndpointUrl();
+  if (!imageUrl) return { status: "offline", error: "Image endpoint not configured" };
+
+  const apiKey = await getTrustRegistryApiKey();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  try {
+    const res = await fetch(`${imageUrl}/lookup?watermarkId=${encodeURIComponent(watermarkId)}`, {
+      method: "GET",
+      headers,
+    });
+
+    if (res.status === 404) {
+      return { status: "not_found" };
+    }
+    if (!res.ok) {
+      return { status: "offline", error: `HTTP ${res.status}` };
     }
 
-    return {
-      payload: parsePayloadField(description),
-      base64: base64Image,
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      payload?: SignedImagePayload;
     };
-  } catch {
-    return { payload: null, base64: base64Image };
+    if (data.ok && data.payload) {
+      return { status: "found", payload: data.payload };
+    }
+    return { status: "not_found" };
+  } catch (e) {
+    return { status: "offline", error: e instanceof Error ? e.message : "network error" };
   }
 }
 
@@ -838,12 +809,17 @@ export async function getImageTrustSettingsSnapshot(): Promise<{
 
 export async function protectImageWithSignature(imageUri: string): Promise<ProtectResult> {
   const identity = await ensureDeviceRegistration(await getOrCreateIdentity());
-  const jpeg = await normalizeToJpegBase64(imageUri);
-  const imageBytes = base64ToBytes(jpeg.base64);
+  const jpegNormalized = await normalizeToJpegBase64(imageUri);
+  const imageBytes = base64ToBytes(jpegNormalized.base64);
   const hashes = extractPixelDigestAndPHash(imageBytes);
 
+  const sha64 = hashes.sha256Hex.slice(0, 16);
+  const watermarkId = `${sha64}${hashes.pHash}`;
+
   const appVersion = Constants.expoConfig?.version ?? "0.0.0";
-  const appBuildNumber = Number(Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode ?? 0);
+  const appBuildNumber = Number(
+    Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode ?? 0
+  );
   const deviceModel =
     (Platform.constants && (Platform.constants as { Model?: string }).Model) ||
     `${Platform.OS}-${String(Platform.Version)}`;
@@ -860,6 +836,7 @@ export async function protectImageWithSignature(imageUri: string): Promise<Prote
     publicKey: identity.publicKeyBase64,
     masterCert: identity.masterCert ?? "",
     cloudVerifyURL: identity.cloudVerifyURL ?? (await getVerifyEndpointUrl()) ?? "",
+    watermarkId,
   };
 
   if (!unsignedPayload.masterCert) {
@@ -869,14 +846,13 @@ export async function protectImageWithSignature(imageUri: string): Promise<Prote
   const messageBytes = utf8ToBytes(canonicalJson(unsignedPayload));
   const messageHash = sha256(messageBytes);
   const privateKeyBytes = hexToBytes(identity.privateKeyHex);
-  // p256.sign() may return a Signature object or Uint8Array depending on @noble/curves version.
-  // Cast to unknown so toCompactSignatureBytes() handles both cases without a TS error.
   const signatureRaw = p256.sign(messageHash, privateKeyBytes, { prehash: false });
   const signatureBytes = toCompactSignatureBytes(signatureRaw as unknown);
 
   __debug("protect:sign", {
     signatureLengthBytes: signatureBytes.length,
     publicKeyB64Prefix: identity.publicKeyBase64.slice(0, 16),
+    watermarkId,
   });
 
   const payload: SignedImagePayload = {
@@ -884,7 +860,12 @@ export async function protectImageWithSignature(imageUri: string): Promise<Prote
     signature: bytesToBase64(signatureBytes),
   };
 
-  const protectedUri = await embedSignedPayload(jpeg.base64, payload);
+  const protectedUri = await embedDctAndSaveImage(jpegNormalized.base64, watermarkId);
+
+  storeImagePayloadInCloud(payload).catch((e) => {
+    __debug("protect:storeInCloud:error", { error: String(e) });
+  });
+
   return { protectedUri, payload };
 }
 
@@ -896,28 +877,131 @@ export async function verifySignedImage(
     hashCheck: false,
     signatureCheck: false,
     masterCertCheck: false,
-    // "skipped" until we actually attempt a cloud call (avoids misleading "offline" when cert fails early)
     cloudCheck: options?.cloudCheck === false ? "skipped" : "skipped",
   };
 
-  const extracted = await readSignedPayloadFromImage(imageUri);
-  if (!extracted.payload) {
+  let imageBytes: Uint8Array;
+  try {
+    const base64Image = await FileSystem.readAsStringAsync(imageUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    imageBytes = base64ToBytes(base64Image);
+  } catch (e) {
     return {
-      status: "NO_PROTECTION",
-      summary: "No ThreatLens protection payload was found in this image.",
+      status: "CORRUPT",
+      summary: "Could not read image file for verification.",
       checks,
-      details: ["No signed EXIF payload detected."],
+      details: [e instanceof Error ? e.message : "File read failed"],
     };
   }
 
-  const payload = extracted.payload;
+  let decoded: { data: Uint8Array; width: number; height: number };
+  try {
+    decoded = jpeg.decode(imageBytes, { useTArray: true, formatAsRGBA: true });
+  } catch {
+    return {
+      status: "NO_PROTECTION",
+      summary: "Image could not be parsed as JPEG.",
+      checks,
+      details: ["JPEG decode failed."],
+    };
+  }
 
-  const imageBytes = base64ToBytes(extracted.base64);
+  const extracted = extractDctWatermark(decoded.data, decoded.width, decoded.height);
+  if (!extracted.watermarkHex) {
+    return {
+      status: "NO_PROTECTION",
+      summary: "No ThreatLens watermark was detected in this image.",
+      checks,
+      details: [
+        "No valid DCT watermark found in image frequencies.",
+        `Confidence score: ${(extracted.confidence * 100).toFixed(1)}%`,
+      ],
+    };
+  }
+
+  const watermarkId = extracted.watermarkHex;
+  // First 64 bits are a lookup nonce (derived from original pixel SHA before DCT embedding).
+  // They will NOT match a recomputed SHA because DCT embedding changes the pixels.
+  // Only used as part of the cloud lookup key.
+  const embeddedPhash = watermarkId.slice(16, 32);
+
   const recomputed = extractPixelDigestAndPHash(imageBytes);
-  const shaMatch = recomputed.sha256Hex === payload.sha256;
-  const pHashDistance = hammingDistanceHex(recomputed.pHash, payload.phash);
-  checks.hashCheck = shaMatch;
+  const pHashDistance = hammingDistanceHex(recomputed.pHash, embeddedPhash);
 
+  // dHash comparison is the offline tamper check. It operates at a coarse 9x8 grid
+  // so it's stable across DCT embedding and JPEG re-compression, but catches
+  // meaningful visual edits (AI manipulation, cropping, overlays, etc.)
+  const hashCheck = pHashDistance <= PHASH_TAMPER_THRESHOLD;
+  checks.hashCheck = hashCheck;
+
+  if (!hashCheck) {
+    return {
+      status: "TAMPERED",
+      summary: "Image content was visually modified after watermarking.",
+      checks,
+      watermarkId,
+      shaMatch: false,
+      pHashDistance,
+      details: [
+        "Perceptual hash distance exceeds tamper threshold.",
+        `Hamming distance: ${pHashDistance} (threshold: ${PHASH_TAMPER_THRESHOLD}).`,
+        "This indicates visual tampering or significant content modifications.",
+      ],
+    };
+  }
+
+  if (options?.cloudCheck === false) {
+    return {
+      status: "INTEGRITY_VERIFIED",
+      summary: "Image pixel integrity is verified, but cloud verification was skipped.",
+      checks: { ...checks, cloudCheck: "skipped" },
+      watermarkId,
+      shaMatch: hashCheck,
+      pHashDistance,
+      details: [
+        "DCT watermark verified.",
+        "Pixel hash matched.",
+        "Cloud verification skipped by user setting.",
+      ],
+    };
+  }
+
+  const cloudLookup = await lookupImagePayloadFromCloud(watermarkId);
+
+  if (cloudLookup.status === "offline") {
+    return {
+      status: "INTEGRITY_VERIFIED",
+      summary: "Image pixels are intact and unaltered, but signing source cannot be confirmed while offline.",
+      checks: { ...checks, cloudCheck: "offline" },
+      watermarkId,
+      shaMatch: hashCheck,
+      pHashDistance,
+      details: [
+        "DCT watermark verified.",
+        "Pixel hash matched.",
+        "Cloud source registry unreachable.",
+      ],
+    };
+  }
+
+  if (cloudLookup.status === "not_found" || !cloudLookup.payload) {
+    return {
+      status: "INTEGRITY_VERIFIED",
+      summary: "Image pixels are intact, but no device record was found in the cloud registry.",
+      checks: { ...checks, cloudCheck: "failed" },
+      watermarkId,
+      shaMatch: hashCheck,
+      pHashDistance,
+      details: [
+        "DCT watermark verified.",
+        "Pixel hash matched.",
+        "No cloud registry record found for this watermark ID.",
+      ],
+    };
+  }
+
+  const payload = cloudLookup.payload;
   const signatureCheck = verifyPayloadSignature(payload);
   checks.signatureCheck = signatureCheck;
 
@@ -927,10 +1011,11 @@ export async function verifySignedImage(
   if (!masterCertCheck) {
     return {
       status: "CLONE_APP",
-      summary: "Master certificate check failed. This image was not signed by an official app trust chain.",
+      summary: "Master certificate check failed. Image was not signed by an official app trust chain.",
       checks,
       payload,
-      shaMatch,
+      watermarkId,
+      shaMatch: hashCheck,
       pHashDistance,
       details: ["Master certificate does not validate against embedded master public key."],
     };
@@ -939,35 +1024,17 @@ export async function verifySignedImage(
   if (!signatureCheck) {
     return {
       status: "INVALID_SIGNATURE",
-      summary: "Signature validation failed. The signed payload was altered or forged.",
+      summary: "Signature validation failed for the cloud registry payload.",
       checks,
       payload,
-      shaMatch,
+      watermarkId,
+      shaMatch: hashCheck,
       pHashDistance,
       details: ["ECDSA signature check failed for payload."],
     };
   }
 
-  if (!shaMatch) {
-    const details = ["SHA-256 hash mismatch detected."];
-    if (pHashDistance <= PHASH_TAMPER_THRESHOLD) {
-      details.push("Perceptual hash is close to original, indicating possible duplicate/re-encode.");
-    } else {
-      details.push("Perceptual hash is far from original, indicating strong content changes.");
-    }
-
-    return {
-      status: "TAMPERED",
-      summary: "Image content was modified after signing.",
-      checks,
-      payload,
-      shaMatch,
-      pHashDistance,
-      details,
-    };
-  }
-
-  const cloud = await cloudVerify(payload, options?.cloudCheck !== false);
+  const cloud = await cloudVerify(payload, true);
   checks.cloudCheck = cloud.cloudCheck;
 
   if (cloud.revoked) {
@@ -976,19 +1043,8 @@ export async function verifySignedImage(
       summary: "Cloud registry reports this signing device as revoked.",
       checks,
       payload,
-      shaMatch,
-      pHashDistance,
-      details: cloud.details,
-    };
-  }
-
-  if (cloud.cloudCheck === "offline") {
-    return {
-      status: "OFFLINE",
-      summary: "Local cryptographic checks passed, but cloud status could not be confirmed.",
-      checks,
-      payload,
-      shaMatch,
+      watermarkId,
+      shaMatch: hashCheck,
       pHashDistance,
       details: cloud.details,
     };
@@ -997,10 +1053,11 @@ export async function verifySignedImage(
   if (cloud.cloudCheck === "failed") {
     return {
       status: "CORRUPT",
-      summary: "Payload is valid locally, but cloud registry validation failed.",
+      summary: "Image pixels are valid, but cloud registry device validation failed.",
       checks,
       payload,
-      shaMatch,
+      watermarkId,
+      shaMatch: hashCheck,
       pHashDistance,
       details: cloud.details,
     };
@@ -1008,11 +1065,18 @@ export async function verifySignedImage(
 
   return {
     status: "AUTHENTIC",
-    summary: "All local and cloud checks passed. Image is authentic.",
+    summary: "All DCT integrity and cloud device verification checks passed. Image is authentic.",
     checks,
     payload,
-    shaMatch,
+    watermarkId,
+    shaMatch: hashCheck,
     pHashDistance,
-    details: ["SHA-256 check passed.", "ECDSA signature check passed.", "Master certificate check passed.", ...cloud.details],
+    details: [
+      "DCT watermark verified.",
+      "Perceptual hash check passed.",
+      "ECDSA signature check passed.",
+      "Master certificate check passed.",
+      ...cloud.details,
+    ],
   };
 }

@@ -18,3 +18,7 @@ main = "src/register.ts"
 [[workers]]
 name = "threatlens-verify"
 main = "src/verify.ts"
+
+[[workers]]
+name = "threatlens-image"
+main = "src/image.ts"
