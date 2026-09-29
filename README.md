@@ -1,5 +1,12 @@
 # ThreatLens
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Expo](https://img.shields.io/badge/Expo-000020.svg?logo=expo&logoColor=white)](https://expo.dev/)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android-3DDC84.svg?logo=android&logoColor=white)](https://www.android.com/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020.svg?logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![AI: NVIDIA NIM](https://img.shields.io/badge/AI-NVIDIA_NIM-76B900.svg?logo=nvidia&logoColor=white)](https://build.nvidia.com/)
+
 ThreatLens is an Expo React Native app for personal digital safety. It helps you verify if images have been tampered with, scan messages for scams, and check if your credentials have been leaked in data breaches.
 
 ## Features
@@ -92,4 +99,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 1. Never commit `.env`.
 2. If any API key is exposed, rotate it immediately.
-3. `master_private.pem` must stay in Cloudflare Workers secrets only — never commit it.
+3. `master_private.pem` must stay in Cloudflare Workers secrets only, never commit it.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+
