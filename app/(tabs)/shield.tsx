@@ -38,6 +38,7 @@ export default function ShieldScreen() {
     verifyLoading,
     verifyResult,
     verifySourceUri,
+    cancelProtectFlow,
     changeProtectedFolder,
     pickProtectImage,
     pickVerifyImage,
@@ -105,6 +106,7 @@ export default function ShieldScreen() {
             onSave={() => {
               void saveToGallery();
             }}
+            onCancel={cancelProtectFlow}
           />
         ) : null}
 
@@ -387,6 +389,24 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: THEME.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: "700",
+    fontFamily: THEME.fontFamily.dmSans,
+  },
+  cancelButton: {
+    backgroundColor: `${THEME.colors.danger}1F`,
+    borderWidth: 1,
+    borderColor: `${THEME.colors.danger}8F`,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    borderRadius: THEME.radius.md,
+    gap: 6,
+    flex: 1,
+  },
+  cancelButtonText: {
+    color: THEME.colors.danger,
     fontSize: 15,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.dmSans,

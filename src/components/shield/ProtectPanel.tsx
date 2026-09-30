@@ -17,11 +17,12 @@ interface ProtectPanelProps {
   protectSourceUri: string | null;
   signedImageUri: string | null;
   protectPayload: SignedImagePayload | null;
-  protectStep: "idle" | "picked" | "signing" | "done" | "error";
+  protectStep: "idle" | "picked" | "signing" | "cancelling" | "done" | "error";
   onReset: () => void;
   onPickImage: () => void;
   onProtect: () => void;
   onSave: () => void;
+  onCancel: () => void;
 }
 
 export default function ProtectPanel({
@@ -34,7 +35,12 @@ export default function ProtectPanel({
   onPickImage,
   onProtect,
   onSave,
+  onCancel,
 }: ProtectPanelProps) {
+  const isSigning = protectStep === "signing";
+  const isCancelling = protectStep === "cancelling";
+  const isBusy = isSigning || isCancelling;
+
   return (
     <View style={styles.card}>
       <View style={styles.imageContainer}>
@@ -48,7 +54,7 @@ export default function ProtectPanel({
             <Text style={styles.placeholderText}>Select a photo to sign</Text>
           </View>
         )}
-        {(protectSourceUri || signedImageUri) && (
+        {(protectSourceUri || signedImageUri) && !isBusy && (
           <TouchableOpacity style={styles.clearButton} onPress={onReset}>
             <Feather name="x" size={20} color={THEME.colors.textPrimary} />
           </TouchableOpacity>
@@ -56,24 +62,39 @@ export default function ProtectPanel({
       </View>
 
       <View style={styles.actionsRow}>
-        <Pressable
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-          onPress={onPickImage}
-        >
-          <Feather name="upload" size={18} color={THEME.colors.textPrimary} />
-          <Text style={styles.secondaryButtonText}>Select</Text>
-        </Pressable>
+        {isCancelling ? (
+          <View style={[styles.cancelButton, styles.disabledButton]}>
+            <ActivityIndicator size="small" color={THEME.colors.danger} />
+            <Text style={styles.cancelButtonText}>Cancelling...</Text>
+          </View>
+        ) : isSigning ? (
+          <Pressable
+            style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]}
+            onPress={onCancel}
+          >
+            <Feather name="x" size={18} color={THEME.colors.danger} />
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
+            onPress={onPickImage}
+          >
+            <Feather name="upload" size={18} color={THEME.colors.textPrimary} />
+            <Text style={styles.secondaryButtonText}>Select</Text>
+          </Pressable>
+        )}
 
         <Pressable
           style={({ pressed }) => [
             styles.primaryButton,
-            (!protectSourceUri || protectStep === "signing") && styles.disabledButton,
+            (!protectSourceUri || isBusy) && styles.disabledButton,
             pressed && styles.pressedButton,
           ]}
-          disabled={!protectSourceUri || protectStep === "signing"}
+          disabled={!protectSourceUri || isBusy}
           onPress={onProtect}
         >
-          {protectStep === "signing" ? (
+          {isBusy ? (
             <ActivityIndicator size="small" color="#0A0F14" />
           ) : (
             <>

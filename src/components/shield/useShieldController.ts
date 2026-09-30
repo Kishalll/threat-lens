@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -8,6 +8,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { useDashboardStore } from "../../stores/dashboardStore";
 import {
   getImageTrustSettingsSnapshot,
+  isAbortError,
   protectImageWithSignature,
   verifySignedImage,
 } from "../../services/imageTrustService";
@@ -25,7 +26,7 @@ import { log } from "../../utils/activityLog";
 import type { ToastVariant } from "../../hooks/useToast";
 
 export type ShieldMode = "protect" | "verify" | "settings";
-type ProtectStep = "idle" | "picked" | "signing" | "done" | "error";
+export type ProtectStep = "idle" | "picked" | "signing" | "cancelling" | "done" | "error";
 
 interface ShieldDeviceSnapshot {
   installID: string | null;
@@ -76,6 +77,11 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   const [protectStep, setProtectStep] = useState<ProtectStep>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // In-flight protect run bookkeeping (refs so cancel works without re-render races).
+  const protectAbortRef = useRef<AbortController | null>(null);
+  const protectCancelledRef = useRef<boolean>(false);
+  const protectRunIdRef = useRef<number>(0);
+
   const [verifySourceUri, setVerifySourceUri] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null);
   const [verifyLoading, setVerifyLoading] = useState<boolean>(false);
@@ -109,6 +115,12 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   }, [loadSettings]);
 
   const resetProtectState = useCallback(() => {
+    // Invalidate and abort any in-flight protect run so it cannot overwrite the reset state.
+    protectRunIdRef.current += 1;
+    protectAbortRef.current?.abort();
+    protectAbortRef.current = null;
+    protectCancelledRef.current = false;
+
     setProtectSourceUri(null);
     setSignedImageUri(null);
     setProtectPayload(null);
@@ -158,15 +170,38 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   }, []);
 
   const runProtectFlow = useCallback(async () => {
-    if (!protectSourceUri) {
+    if (!protectSourceUri || protectAbortRef.current) {
       return;
     }
+
+    const runId = protectRunIdRef.current + 1;
+    protectRunIdRef.current = runId;
+    const controller = new AbortController();
+    protectAbortRef.current = controller;
+    protectCancelledRef.current = false;
+    const isStale = () => protectRunIdRef.current !== runId;
 
     setProtectStep("signing");
     setErrorMessage(null);
 
     try {
-      const result = await protectImageWithSignature(protectSourceUri);
+      const result = await protectImageWithSignature(protectSourceUri, {
+        signal: controller.signal,
+        isCancelled: () => protectCancelledRef.current || isStale(),
+      });
+
+      if (isStale()) {
+        // Reset pressed mid-run: discard the output, state was already cleared.
+        await FileSystem.deleteAsync(result.protectedUri, { idempotent: true }).catch(() => {});
+        return;
+      }
+
+      if (protectCancelledRef.current) {
+        // Cancel landed after the last service checkpoint: revert, do not publish the result.
+        await FileSystem.deleteAsync(result.protectedUri, { idempotent: true }).catch(() => {});
+        setProtectStep("picked");
+        return;
+      }
 
       setSignedImageUri(result.protectedUri);
       setProtectPayload(result.payload);
@@ -177,14 +212,44 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       useDashboardStore.getState().incrementProtectedImagesCount();
       await loadSettings();
     } catch (error) {
+      if (isStale()) {
+        return;
+      }
+
+      if (protectCancelledRef.current || isAbortError(error)) {
+        // Cancelled: nothing was kept, return to the "image selected" state.
+        setSignedImageUri(null);
+        setProtectPayload(null);
+        setErrorMessage(null);
+        setProtectStep("picked");
+        return;
+      }
+
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
           : "Unable to sign this image.";
       setErrorMessage(message);
       setProtectStep("error");
+    } finally {
+      if (!isStale()) {
+        protectAbortRef.current = null;
+        protectCancelledRef.current = false;
+      }
     }
   }, [loadSettings, protectSourceUri]);
+
+  const cancelProtectFlow = useCallback(() => {
+    const controller = protectAbortRef.current;
+    if (!controller || protectCancelledRef.current) {
+      return;
+    }
+
+    // Show "Cancelling..." immediately; the run unwinds in the background.
+    protectCancelledRef.current = true;
+    setProtectStep("cancelling");
+    controller.abort();
+  }, []);
 
   const runVerifyFlow = useCallback(async () => {
     if (!verifySourceUri) {
@@ -391,6 +456,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     verifyLoading,
     verifyResult,
     verifySourceUri,
+    cancelProtectFlow,
     changeProtectedFolder,
     pickProtectImage,
     pickVerifyImage,

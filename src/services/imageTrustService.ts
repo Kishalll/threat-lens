@@ -439,7 +439,42 @@ async function isMasterCertValidForIdentity(
   }
 }
 
-async function ensureDeviceRegistration(identity: DeviceIdentity): Promise<DeviceIdentity> {
+export interface ProtectCancelOptions {
+  signal?: AbortSignal;
+  isCancelled?: () => boolean;
+}
+
+export function isAbortError(error: unknown): boolean {
+  // React Native's fetch abort error is a DOMException-like object, not always `instanceof Error`.
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
+function createAbortError(): Error {
+  const error = new Error("Image protection cancelled.");
+  error.name = "AbortError";
+  return error;
+}
+
+/**
+ * Cooperative cancellation checkpoint. Yields to the event loop first so a
+ * pending cancel press can be processed between the heavy synchronous stages.
+ */
+async function throwIfCancelled(options?: ProtectCancelOptions): Promise<void> {
+  if (!options) return;
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (options.signal?.aborted || options.isCancelled?.()) {
+    throw createAbortError();
+  }
+}
+
+async function ensureDeviceRegistration(
+  identity: DeviceIdentity,
+  signal?: AbortSignal
+): Promise<DeviceIdentity> {
   if (identity.masterCert && identity.cloudVerifyURL) {
     const cachedCertIsValid = await isMasterCertValidForIdentity(
       identity.masterCert,
@@ -477,6 +512,7 @@ async function ensureDeviceRegistration(identity: DeviceIdentity): Promise<Devic
   const response = await fetch(registerUrl, {
     method: "POST",
     headers,
+    signal,
     body: JSON.stringify({
       installID: identity.installID,
       publicKey: identity.publicKeyBase64,
@@ -807,11 +843,21 @@ export async function getImageTrustSettingsSnapshot(): Promise<{
   };
 }
 
-export async function protectImageWithSignature(imageUri: string): Promise<ProtectResult> {
-  const identity = await ensureDeviceRegistration(await getOrCreateIdentity());
+export async function protectImageWithSignature(
+  imageUri: string,
+  cancelOptions?: ProtectCancelOptions
+): Promise<ProtectResult> {
+  await throwIfCancelled(cancelOptions);
+  const identity = await ensureDeviceRegistration(
+    await getOrCreateIdentity(),
+    cancelOptions?.signal
+  );
+  await throwIfCancelled(cancelOptions);
   const jpegNormalized = await normalizeToJpegBase64(imageUri);
+  await throwIfCancelled(cancelOptions);
   const imageBytes = base64ToBytes(jpegNormalized.base64);
   const hashes = extractPixelDigestAndPHash(imageBytes);
+  await throwIfCancelled(cancelOptions);
 
   const sha64 = hashes.sha256Hex.slice(0, 16);
   const watermarkId = `${sha64}${hashes.pHash}`;
@@ -860,7 +906,17 @@ export async function protectImageWithSignature(imageUri: string): Promise<Prote
     signature: bytesToBase64(signatureBytes),
   };
 
+  await throwIfCancelled(cancelOptions);
   const protectedUri = await embedDctAndSaveImage(jpegNormalized.base64, watermarkId);
+
+  // Revert: if cancelled while the watermarked file was being written, discard it
+  // and bail out before anything is uploaded to the cloud registry.
+  try {
+    await throwIfCancelled(cancelOptions);
+  } catch (error) {
+    await FileSystem.deleteAsync(protectedUri, { idempotent: true }).catch(() => {});
+    throw error;
+  }
 
   storeImagePayloadInCloud(payload).catch((e) => {
     __debug("protect:storeInCloud:error", { error: String(e) });
