@@ -3,6 +3,12 @@ import { sendLocalNotification } from "../services/notificationService";
 import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
 import { log } from "../utils/activityLog";
+import {
+  isLikelyMessagingPackage,
+  isLikelySystemOrServiceNotification,
+  isLowSignalNotification,
+  isNoiseText,
+} from "../utils/notificationFilters";
 
 // Get the native module
 const { NotificationModule } = NativeModules;
@@ -16,198 +22,12 @@ const DANGEROUS_CLASSIFICATIONS = new Set(["SCAM", "PHISHING"]);
 const PROMO_CLASSIFICATION = "PROMO";
 let interceptorRegistered = false;
 
-const ALLOWED_MESSAGING_PACKAGES = new Set([
-  // WhatsApp
-  "com.whatsapp",
-  "com.whatsapp.w4b",
-
-  // SMS apps (common OEM + Google)
-  "com.google.android.apps.messaging",
-  "com.google.android.apps.googlevoice",
-  "com.android.mms",
-  "com.samsung.android.messaging",
-  "com.sonyericsson.conversations",
-  "com.miui.smsextra",
-  "com.oneplus.mms",
-  "com.oplus.message",
-  "com.coloros.message",
-  "com.vivo.messaging",
-  "com.htc.sense.mms",
-  "com.huawei.message",
-
-  // Popular messaging apps
-  "org.telegram.messenger",
-  "org.telegram.plus",
-  "org.thoughtcrime.securesms", // Signal
-  "com.facebook.orca", // Messenger
-  "com.instagram.android",
-  "com.discord",
-  "jp.naver.line.android",
-  "com.tencent.mm", // WeChat
-  "com.viber.voip",
-  "com.kakao.talk",
-  "com.zing.zalo",
-  "com.skype.raider",
-  "com.microsoft.teams",
-  "com.bbm",
-
-  // Email apps (for phishing detection requirement)
-  "com.google.android.gm", // Gmail
-  "com.microsoft.office.outlook",
-  "com.yahoo.mobile.client.android.mail",
-  "ch.protonmail.android",
-  "com.samsung.android.email.provider",
-  "com.sonyericsson.email",
-  "com.tencent.androidqqmail",
-  "com.my.mail",
-  "com.readdle.spark",
-]);
-
-const IGNORED_PACKAGES = new Set([
-  "android",
-  "com.android.systemui",
-  "com.android.incallui",
-  "org.kde.kdeconnect_tp",
-  "com.google.android.gms",
-  "com.snapchat.android",
-
-  // Shopping and commerce
-  "in.amazon.mshop.android.shopping",
-  "com.flipkart.android",
-  "com.myntra.android",
-  "com.meesho.supply",
-
-  // Food and delivery
-  "in.swiggy.android",
-  "com.application.zomato",
-
-  // Travel and utilities
-  "com.olacabs.customer",
-  "com.ubercab",
-  "cris.org.in.prs.ima",
-  "com.myairtelapp",
-  "com.jio.myjio",
-]);
-
-const IGNORED_TEXT_PATTERNS = [
-  /shared mobile data/i,
-  /device connected/i,
-  /checking for new messages/i,
-  /checking for updates/i,
-  /update available/i,
-  /app updates? available/i,
-  /\b\d+\s+apps?\s+(updated|installed|ready to update)\b/i,
-  /\b(downloading|installing)\s+(update|updates|app|apps)\b/i,
-  /\b(update|installation)\s+(complete|completed|successful)\b/i,
-  /\b(app|apps)\s+(installed|uninstalled)\b/i,
-  /is doing work in the background/i,
-  /working in the background/i,
-  /sync in progress/i,
-  /syncing/i,
-  /backup in progress/i,
-  /usb debugging/i,
-  /charging this device via usb/i,
-  /ongoing call/i,
-  /wi[- ]?fi hotspot on/i,
-  /not connected to any device/i,
-  /tap to view more options/i,
-  /^android system$/i,
-];
-
-const LOW_SIGNAL_PATTERNS = [
-  /\bis typing\b/i,
-  /\breacted to your (message|story)\b/i,
-  /\bmentioned you in a (story|post)\b/i,
-  /\bstarted a call\b/i,
-  /\bmissed (voice|video) call\b/i,
-  /\bmissed call\b/i,
-  /^new message$/i,
-];
-
-const TEAMS_LOW_SIGNAL_PATTERNS = [
-  /\b(meeting|call) (starting|started|ended)\b/i,
-  /\bjoin now\b/i,
-  /\bscheduled (a )?meeting\b/i,
-  /\breacted with\b/i,
-  /\bchanged the (team|channel|group) (name|picture)\b/i,
-  /\badded you to (a )?(team|channel|group)\b/i,
-  /\bmentioned you in a channel\b/i,
-];
-
-const MESSENGER_LOW_SIGNAL_PATTERNS = [
-  /\breacted to your message\b/i,
-  /\bis active now\b/i,
-  /\bstarted a call\b/i,
-  /\bmissed (voice|video) call\b/i,
-];
-
-const INSTAGRAM_LOW_SIGNAL_PATTERNS = [
-  /\bstarted following you\b/i,
-  /\bliked your (post|photo|story|reel)\b/i,
-  /\bcommented on your (post|reel)\b/i,
-  /\bmentioned you in (their )?story\b/i,
-  /\bsent you a reel\b/i,
-  /\bposted to (their )?(story|reel)\b/i,
-];
-
-// Short casual messages with no digits or URLs — "did u commit", "ok", "wat r the changes"
-// Applied to messaging apps only. Email packages are intentionally excluded so
-// short subjects like "Your invoice is ready" still get classified.
-const SHORT_MESSAGE_PATTERN = /^[^\d\n]{0,60}$/;
-
-const MESSAGING_PACKAGES_WITH_SHORT_FILTER = new Set([
-  "com.whatsapp",
-  "com.whatsapp.w4b",
-  "com.google.android.apps.messaging",
-  "com.google.android.apps.googlevoice",
-  "com.android.mms",
-  "com.samsung.android.messaging",
-  "com.sonyericsson.conversations",
-  "com.miui.smsextra",
-  "com.oneplus.mms",
-  "com.oplus.message",
-  "com.coloros.message",
-  "com.vivo.messaging",
-  "com.htc.sense.mms",
-  "com.huawei.message",
-  "org.telegram.messenger",
-  "org.telegram.plus",
-  "org.thoughtcrime.securesms",
-  "com.facebook.orca",
-  "com.instagram.android",
-  "com.discord",
-  "jp.naver.line.android",
-  "com.tencent.mm",
-  "com.viber.voip",
-  "com.kakao.talk",
-  "com.zing.zalo",
-  "com.skype.raider",
-  "com.microsoft.teams",
-  "com.bbm",
-]);
-
-const APP_SPECIFIC_LOW_SIGNAL_PATTERNS: Record<string, RegExp[]> = {
-  "com.microsoft.teams": TEAMS_LOW_SIGNAL_PATTERNS,
-  "com.facebook.orca": MESSENGER_LOW_SIGNAL_PATTERNS,
-  "com.instagram.android": INSTAGRAM_LOW_SIGNAL_PATTERNS,
-};
-
-const SERVICE_NOTIFICATION_CATEGORIES = new Set([
-  "service",
-  "status",
-  "progress",
-  "transport",
-  "sys",
-]);
-
 const DUPLICATE_WINDOW_MS = 120_000;
-const CLASSIFICATION_COOLDOWN_MS = 2_000;
 const TRUNCATED_PROMPT_COOLDOWN_MS = 180_000;
 const RETRY_PROMPT_COOLDOWN_MS = 300_000;
 
 const recentFingerprints = new Map<string, number>();
 const recentTruncatedPrompts = new Map<string, number>();
-let lastClassificationAt = 0;
 let lastRetryPromptAt = 0;
 let classificationPausedUntil = 0;
 
@@ -231,70 +51,6 @@ function cleanupOldEntries(map: Map<string, number>, ttlMs: number, now: number)
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function isLikelyMessagingPackage(packageName: string): boolean {
-  const normalized = packageName.trim().toLowerCase();
-  if (!normalized || IGNORED_PACKAGES.has(normalized)) {
-    return false;
-  }
-
-  if (ALLOWED_MESSAGING_PACKAGES.has(normalized)) {
-    return true;
-  }
-
-  // Strict fallback for unknown OEM SMS package IDs.
-  return normalized.includes(".mms") || normalized.endsWith(".sms");
-}
-
-function isNoiseText(title: string, text: string): boolean {
-  const combined = `${title}\n${text}`.trim();
-  if (!combined) {
-    return true;
-  }
-  return IGNORED_TEXT_PATTERNS.some((pattern) => pattern.test(combined));
-}
-
-function isLikelySystemOrServiceNotification(category: string, isOngoing: boolean): boolean {
-  if (isOngoing) {
-    return true;
-  }
-
-  const normalizedCategory = category.trim().toLowerCase();
-  if (!normalizedCategory) {
-    return false;
-  }
-
-  return SERVICE_NOTIFICATION_CATEGORIES.has(normalizedCategory);
-}
-
-function isLowSignalNotification(packageName: string, title: string, text: string): boolean {
-  const combined = `${title}\n${text}`.trim();
-  if (!combined) {
-    return true;
-  }
-
-  if (LOW_SIGNAL_PATTERNS.some((pattern) => pattern.test(combined))) {
-    return true;
-  }
-
-  const normalizedPackage = packageName.trim().toLowerCase();
-
-  // Short casual message filter — only for messaging apps, not email
-  if (MESSAGING_PACKAGES_WITH_SHORT_FILTER.has(normalizedPackage) && SHORT_MESSAGE_PATTERN.test(combined)) {
-    // Never skip if it contains threat-indicative keywords
-    const hasThreatKeyword = /kyc|otp|cvv|pin|password|lottery|prize|winner|verify|suspend|block|arrest|urgent|click here|tap here|http/i.test(combined);
-    if (!hasThreatKeyword) {
-      return true;
-    }
-  }
-
-  const packagePatterns = APP_SPECIFIC_LOW_SIGNAL_PATTERNS[normalizedPackage];
-  if (Array.isArray(packagePatterns)) {
-    return packagePatterns.some((pattern) => pattern.test(combined));
-  }
-
-  return false;
 }
 
 function shouldClassify(
@@ -333,12 +89,7 @@ function shouldClassify(
     return false;
   }
 
-  if (now - lastClassificationAt < CLASSIFICATION_COOLDOWN_MS) {
-    return false;
-  }
-
   recentFingerprints.set(fingerprint, now);
-  lastClassificationAt = now;
   return true;
 }
 
@@ -492,16 +243,6 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
-      if (isTruncated) {
-        if (!shouldPromptForTruncated(packageName)) {
-          log("dedup_skip", `truncated prompt cooldown for ${packageName}`);
-          return;
-        }
-        log("paste_prompt", `truncated notif from ${packageName}`);
-        await promptForFullMessage(packageName, title, text);
-        return;
-      }
-
       if (!hasReadableText(text)) {
         log("noise_filtered", `empty text from ${packageName}`);
         return;
@@ -531,11 +272,6 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
-      if (now - lastClassificationAt < CLASSIFICATION_COOLDOWN_MS) {
-        log("dedup_skip", `cooldown active for ${packageName}`);
-        return;
-      }
-
       if (!shouldClassify(packageName, title, text, category, isOngoing)) {
         return;
       }
@@ -547,6 +283,18 @@ export function initializeNotificationInterceptor() {
       const scanResult = await classifyMessage(text);
 
       log("classified", `${scanResult.classification} (${scanResult.confidence}%) from ${packageName}`);
+
+      // A cut-off preview is only trusted when it already looks like a threat;
+      // otherwise ask the user for the full text.
+      if (isTruncated && !DANGEROUS_CLASSIFICATIONS.has(scanResult.classification)) {
+        if (!shouldPromptForTruncated(packageName)) {
+          log("dedup_skip", `truncated prompt cooldown for ${packageName}`);
+          return;
+        }
+        log("paste_prompt", `truncated notif from ${packageName}`);
+        await promptForFullMessage(packageName, title, text);
+        return;
+      }
 
       // Also record into scanner store history so it shows up in scan history.
       await useScannerStore.getState().recordBackgroundScan(scanResult);

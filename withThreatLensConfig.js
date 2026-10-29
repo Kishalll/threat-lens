@@ -176,7 +176,9 @@ class NotificationService : NotificationListenerService() {
     const val EXTRA_IS_ONGOING = "isOngoing"
     private const val DEBUG_TAG = "ThreatLensNotif"
 
-    private const val DEDUP_WINDOW_MS = 120_000L
+    // Apps re-post old messages when a new one arrives, so remember them for a while.
+    private const val DEDUP_WINDOW_MS = 6 * 60 * 60 * 1000L
+    private const val MAX_FINGERPRINTS = 300
     private val recentFingerprints = mutableMapOf<String, Long>()
     private val STACKED_MESSAGING_PACKAGES = setOf(
       "com.whatsapp", "com.whatsapp.w4b", "com.google.android.apps.messaging",
@@ -199,10 +201,16 @@ class NotificationService : NotificationListenerService() {
       return
     }
 
+    // Group summaries repeat the chat notification as "Sender: text", which would be scanned twice.
+    if ((sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0) {
+      Log.d(DEBUG_TAG, "[DEBUG-notif] group summary skip pkg=\${sbn.packageName}")
+      return
+    }
+
     val extras = sbn.notification.extras ?: Bundle.EMPTY
     val messageText = extractBestText(sbn.packageName, extras)
     val title = extractBestTitle(extras)
-    val isTruncated = isLikelyTruncated(extras, messageText)
+    val isTruncated = isLikelyTruncated(messageText)
     val category = sbn.notification.category.orEmpty()
     val isOngoing = sbn.isOngoing
     Log.d(DEBUG_TAG, "[DEBUG-notif] posted pkg=\${sbn.packageName} title=\${title.take(40)} textLen=\${messageText.length}")
@@ -219,6 +227,9 @@ class NotificationService : NotificationListenerService() {
       if (recentFingerprints.containsKey(fingerprint)) {
         Log.d(DEBUG_TAG, "[DEBUG-notif] dedup skip pkg=\${sbn.packageName}")
         return
+      }
+      if (recentFingerprints.size >= MAX_FINGERPRINTS) {
+        recentFingerprints.remove(recentFingerprints.keys.first())
       }
       recentFingerprints[fingerprint] = now
     }
@@ -364,20 +375,10 @@ class NotificationService : NotificationListenerService() {
       sourcePackage.endsWith(".sms")
   }
 
-  private fun isLikelyTruncated(extras: Bundle, extractedText: String): Boolean {
-    if (extractedText.isBlank()) {
-      return true
-    }
-
-    val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
-    val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim().orEmpty()
-
-    val hasEllipsis = text.endsWith("...") || text.endsWith("…") ||
-      extractedText.endsWith("...") || extractedText.endsWith("…")
-
-    val hasLongCollapsedText = bigText.isBlank() && text.length >= 140
-
-    return hasEllipsis || hasLongCollapsedText
+  // Long messages usually arrive in full (MessagingStyle or big text), so only
+  // treat the text as cut off when the app itself ended it with an ellipsis.
+  private fun isLikelyTruncated(extractedText: String): Boolean {
+    return extractedText.endsWith("...") || extractedText.endsWith("…")
   }
 }
 `;
@@ -808,8 +809,10 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
       "com.yahoo.mobile.client.android.mail","ch.protonmail.android",
       "com.samsung.android.email.provider","com.sonyericsson.email"
     )
-    private val THREAT_KW = Regex("""(?i)kyc|otp|cvv|pin|password|lottery|prize|winner|verify|suspend|block|arrest|urgent|click here|tap here|http""")
-    private val SHORT_MSG = Regex("""^[^\\d\\n]{0,60}$""")
+    // Short messages that mention any of these are scanned anyway; lures are often brief.
+    private val THREAT_KW = Regex("""(?i)kyc|otp|cvv|\\bpin\\b|password|lottery|prize|winner|verify|suspend|block|arrest|urgent|click|tap here|https?:|www\\.|link|video|photo|claim|reward|account|bank|new number|refund|upi|gift|\\bwon\\b|job|invest|loan""")
+    // Media notifications with no caption carry nothing to scan.
+    private val MEDIA_ONLY = Regex("""(?i)^\\W*(?:sent an? )?(?:sticker|photo|video|gif|audio|voice message|document|contact|location|live location)\\b[\\s\\d:().]*$""")
     private val SYSTEM_PROMPT = """
 You are a cybersecurity expert for the Indian market. Classify messages as exactly one of SAFE, PROMO, SCAM, or PHISHING. Most messages are harmless.
 PHISHING: asks to share/enter OTP, PIN, CVV, password or card details, or links to verify/reactivate/update KYC.
@@ -826,6 +829,8 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     val title = inputData.getString(NotificationService.EXTRA_TITLE).orEmpty()
     val text = inputData.getString(NotificationService.EXTRA_TEXT).orEmpty()
     val isTruncated = inputData.getBoolean(NotificationService.EXTRA_IS_TRUNCATED, false)
+    val category = inputData.getString(NotificationService.EXTRA_CATEGORY).orEmpty()
+    val isOngoing = inputData.getBoolean(NotificationService.EXTRA_IS_ONGOING, false)
     Log.d(DEBUG_TAG, "[DEBUG-notif] worker start pkg=\${pkg} textLen=\${text.length} truncated=\${isTruncated}")
     if (!isAllowedPackage(pkg)) {
       return Result.success()
@@ -837,7 +842,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
         return Result.success()
       }
       AppProcessState.ALIVE_IN_BACKGROUND -> {
-        if (tryStartHeadlessTask(pkg, title, text, isTruncated)) {
+        if (tryStartHeadlessTask(pkg, title, text, isTruncated, category, isOngoing)) {
           Log.d(DEBUG_TAG, "[DEBUG-notif] worker delegated to headless js pkg=\${pkg}")
           return Result.success()
         }
@@ -870,17 +875,6 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       return Result.success()
     }
 
-    if (isTruncated) {
-      val clipped = text.trim().take(120)
-      postNotification(
-        "Action Needed: Paste Full Message",
-        "ThreatLens couldn't read the full message from \${title.ifBlank { pkg }}. Tap to paste it in Scanner.",
-        "threatlens://scanner?prefill=\${Uri.encode(clipped)}"
-      )
-      Log.d(DEBUG_TAG, "[DEBUG-notif] worker prompt truncated pkg=\${pkg}")
-      return Result.success()
-    }
-
     if (text.isBlank() || isNoise(title, text) || isLowSignal(pkg, title, text)) {
       Log.d(DEBUG_TAG, "[DEBUG-notif] worker skip filtered pkg=\${pkg} text=\${text.take(60)}")
       return Result.success()
@@ -891,7 +885,22 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       return Result.success()
     }
 
-    val result = classifyWithNim(text, nimKey) ?: return Result.success()
+    val result = classifyWithNim(text, nimKey)
+
+    // A cut-off preview is only trusted when it already looks like a threat;
+    // otherwise ask the user for the full text.
+    if (isTruncated && result?.classification != "SCAM" && result?.classification != "PHISHING") {
+      val clipped = text.trim().take(120)
+      postNotification(
+        "Action Needed: Paste Full Message",
+        "ThreatLens couldn't read the full message from \${title.ifBlank { pkg }}. Tap to paste it in Scanner.",
+        "threatlens://scanner?prefill=\${Uri.encode(clipped)}"
+      )
+      Log.d(DEBUG_TAG, "[DEBUG-notif] worker prompt truncated pkg=\${pkg}")
+      return Result.success()
+    }
+
+    if (result == null) return Result.success()
     Log.d(DEBUG_TAG, "[DEBUG-notif] worker classified pkg=\${pkg} cls=\${result.classification}")
     if (result.classification == "SAFE") return Result.success()
     val scanJson = buildScanJson(text, result)
@@ -920,7 +929,10 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       ?.firstOrNull { it.processName == applicationContext.packageName }
       ?: return AppProcessState.NOT_RUNNING
 
-    return if (isAppActive) {
+    // The flag can be left true if the app died while open, so also check the
+    // process is really in the foreground (the listener alone keeps it alive).
+    val isForeground = process.importance == android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    return if (isAppActive && isForeground) {
       AppProcessState.ACTIVE
     } else {
       AppProcessState.ALIVE_IN_BACKGROUND
@@ -931,7 +943,9 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     pkg: String,
     title: String,
     text: String,
-    isTruncated: Boolean
+    isTruncated: Boolean,
+    category: String,
+    isOngoing: Boolean
   ): Boolean {
     return try {
       val intent = Intent(applicationContext, HeadlessNotificationTaskService::class.java).apply {
@@ -939,6 +953,8 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
         putExtra(NotificationService.EXTRA_TITLE, title)
         putExtra(NotificationService.EXTRA_TEXT, text)
         putExtra(NotificationService.EXTRA_IS_TRUNCATED, isTruncated)
+        putExtra(NotificationService.EXTRA_CATEGORY, category)
+        putExtra(NotificationService.EXTRA_IS_ONGOING, isOngoing)
       }
       HeadlessJsTaskService.acquireWakeLockNow(applicationContext)
       applicationContext.startService(intent)
@@ -974,8 +990,13 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
   private fun isLowSignal(pkg: String, title: String, text: String): Boolean {
     val c = "\$title\\n\$text".trim()
     if (c.isBlank() || LOW_SIGNAL_PATTERNS.any { it.containsMatchIn(c) }) return true
-    if (MESSAGING_PACKAGES_WITH_SHORT_FILTER.contains(pkg) && SHORT_MSG.matches(c))
-      return !THREAT_KW.containsMatchIn(c)
+    if (MESSAGING_PACKAGES_WITH_SHORT_FILTER.contains(pkg)) {
+      val t = text.trim()
+      if (MEDIA_ONLY.matches(t)) return true
+      // Very short chat with no digits, unless it mentions a common lure.
+      val words = t.split(Regex("""\\s+""")).filter { it.isNotEmpty() }
+      if (words.size <= 3 && t.none { it.isDigit() } && !THREAT_KW.containsMatchIn(t)) return true
+    }
     return false
   }
 

@@ -1,27 +1,25 @@
-import { NativeModules, Platform } from "react-native";
+import { AppState, NativeModules, Platform } from "react-native";
 import { classifyMessage } from "../services/nimService";
 import { sendLocalNotification } from "../services/notificationService";
 import { useScannerStore } from "../stores/scannerStore";
 import { log } from "../utils/activityLog";
+import {
+  isLikelyMessagingPackage,
+  isLikelySystemOrServiceNotification,
+  isLowSignalNotification,
+  isNoiseText,
+} from "../utils/notificationFilters";
 import type { ScanResult } from "../types";
 
 const DANGEROUS = new Set(["SCAM", "PHISHING"]);
-
-const ALLOWED_PACKAGES = new Set([
-  "com.whatsapp", "com.whatsapp.w4b",
-  "com.google.android.apps.messaging", "com.android.mms",
-  "com.samsung.android.messaging", "org.telegram.messenger",
-  "org.thoughtcrime.securesms", "com.facebook.orca",
-  "com.google.android.gm", "com.microsoft.office.outlook",
-  "com.instagram.android", "com.discord", "com.viber.voip",
-  "com.skype.raider", "com.microsoft.teams",
-]);
 
 type TaskData = {
   packageName?: string;
   title?: string;
   text?: string;
   isTruncated?: boolean;
+  category?: string;
+  isOngoing?: boolean;
 };
 
 async function persistPendingScan(result: ScanResult): Promise<void> {
@@ -37,26 +35,38 @@ async function persistPendingScan(result: ScanResult): Promise<void> {
 }
 
 export default async function notificationTask(taskData: TaskData): Promise<void> {
-  const { packageName = "", title = "", text = "", isTruncated = false } = taskData;
+  const { packageName = "", title = "", text = "", isTruncated = false, category = "", isOngoing = false } = taskData;
 
-  if (!ALLOWED_PACKAGES.has(packageName.toLowerCase())) return;
+  // The in-app listener handles notifications while the app is open.
+  if (AppState.currentState === "active") return;
 
-  if (isTruncated) {
-    const clipped = text.trim().slice(0, 120);
-    log("paste_prompt", `truncated notif from ${packageName} [headless]`);
-    await sendLocalNotification(
-      "Action Needed: Paste Full Message",
-      `ThreatLens couldn't read the full message from ${title || packageName}. Tap to paste it in Scanner.`,
-      { type: "PASTE_FULL_NOTIFICATION_PROMPT", sourcePackage: packageName, capturedText: clipped, threatlensInternal: true }
-    );
+  if (!isLikelyMessagingPackage(packageName) || !text.trim()) return;
+
+  if (
+    isNoiseText(title, text) ||
+    isLikelySystemOrServiceNotification(category, isOngoing) ||
+    isLowSignalNotification(packageName, title, text)
+  ) {
+    log("low_signal", `${packageName} [headless] | "${text.slice(0, 60)}"`);
     return;
   }
-
-  if (!text.trim()) return;
 
   try {
     log("intercepted", `${packageName} [headless] | "${text.slice(0, 60)}"`);
     const result = await classifyMessage(text);
+
+    // A cut-off preview is only trusted when it already looks like a threat;
+    // otherwise ask the user for the full text.
+    if (isTruncated && !DANGEROUS.has(result.classification)) {
+      log("paste_prompt", `truncated notif from ${packageName} [headless]`);
+      await sendLocalNotification(
+        "Action Needed: Paste Full Message",
+        `ThreatLens couldn't read the full message from ${title || packageName}. Tap to paste it in Scanner.`,
+        { type: "PASTE_FULL_NOTIFICATION_PROMPT", sourcePackage: packageName, capturedText: text.trim().slice(0, 120), threatlensInternal: true }
+      );
+      return;
+    }
+
     if (result.classification === "UNAVAILABLE") return;
 
     log("classified", `${result.classification} (${result.confidence}%) from ${packageName} [headless]`);
