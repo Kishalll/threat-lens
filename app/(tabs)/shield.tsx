@@ -18,6 +18,8 @@ import {
 } from "../../src/components/shield/useShieldController";
 import { useToast } from "../../src/hooks/useToast";
 import { THEME } from "../../src/constants/theme";
+import SettingsButton from "../../src/components/settings/SettingsButton";
+import { SettingsNote } from "../../src/components/settings/SettingsControls";
 
 export default function ShieldScreen() {
   const insets = useSafeAreaInsets();
@@ -54,7 +56,12 @@ export default function ShieldScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Image Shield</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.headerTitle}>Image Shield</Text>
+        <SettingsButton title="Shield settings">
+          <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+        </SettingsButton>
+      </View>
       <Text style={styles.subtitle}>
         Add a Digital Fingerprint to your photos. Verify if an image has been Tampered with.
       </Text>
@@ -164,12 +171,19 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 56,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
   headerTitle: {
+    flex: 1,
     color: THEME.colors.textPrimary,
     fontSize: THEME.typography.h1,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
-    marginBottom: 8,
   },
   subtitle: {
     color: THEME.colors.textSecondary,

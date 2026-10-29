@@ -10,6 +10,8 @@ import { useDashboardStore } from "../../src/stores/dashboardStore";
 import SafetyScoreBar from "../../src/components/SafetyScoreBar";
 import FeatureSummaryCard from "../../src/components/FeatureSummaryCard";
 import { THEME } from "../../src/constants/theme";
+import SettingsButton from "../../src/components/settings/SettingsButton";
+import { SettingsNote } from "../../src/components/settings/SettingsControls";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -67,7 +69,12 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.appName}>ThreatLens</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.appName}>ThreatLens</Text>
+          <SettingsButton title="General settings">
+            <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+          </SettingsButton>
+        </View>
         <Text style={styles.tagline}>
           See risks. Act fast. Stay protected.
         </Text>
@@ -139,7 +146,14 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 4,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
   appName: {
+  flex: 1,
   fontFamily: THEME.fontFamily.dmSans,
   fontSize: 32,
   fontWeight: "700",

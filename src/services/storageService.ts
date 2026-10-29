@@ -45,7 +45,14 @@ const DATABASE_SCHEMA_SQL = `
     payload TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `;
+
+const SETTINGS_ROW_KEY = "settings";
 
 let db: SQLite.SQLiteDatabase | null = null;
 let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -290,6 +297,20 @@ export async function getScanResult(id: string): Promise<ScanResult | null> {
   );
   if (!row) return null;
   return toScanResult(row as Record<string, unknown>);
+}
+
+export async function getSettingsJson(): Promise<string | null> {
+  const row = await withDatabase((database) =>
+    database.getFirstAsync("SELECT value FROM app_settings WHERE key = ?", [SETTINGS_ROW_KEY])
+  );
+  const value = (row as { value?: unknown } | null)?.value;
+  return typeof value === "string" ? value : null;
+}
+
+export async function saveSettingsJson(json: string): Promise<void> {
+  await withDatabase((database) =>
+    database.runAsync("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", [SETTINGS_ROW_KEY, json])
+  );
 }
 
 export async function insertActedSuggestion(suggestionId: string): Promise<void> {

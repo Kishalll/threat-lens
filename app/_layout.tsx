@@ -22,6 +22,7 @@ import { requestNotificationPermissions, setupNotificationChannel } from "../src
 import { getKey } from "../src/services/secureKeyService";
 import { useBreachStore } from "../src/stores/breachStore";
 import { useScannerStore } from "../src/stores/scannerStore";
+import { useSettingsStore } from "../src/stores/settingsStore";
 import { THEME } from "../src/constants/theme";
 import type { ScanResult } from "../src/types";
 import { log } from "../src/utils/activityLog";
@@ -68,6 +69,7 @@ export default function RootLayout() {
         syncNativeAppActiveState(AppState.currentState === "active");
 
         await initDatabase();
+        await useSettingsStore.getState().hydrate();
         const scannerStore = useScannerStore.getState();
         await scannerStore.hydrateFromStorage();
 

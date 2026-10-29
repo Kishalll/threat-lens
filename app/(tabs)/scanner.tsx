@@ -5,6 +5,8 @@ import Feather from "@expo/vector-icons/Feather";
 import { useScannerStore } from "../../src/stores/scannerStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
+import SettingsButton from "../../src/components/settings/SettingsButton";
+import { SettingsNote } from "../../src/components/settings/SettingsControls";
 
 export default function ScannerScreen() {
   const router = useRouter();
@@ -112,7 +114,12 @@ export default function ScannerScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Message Scanner</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.headerTitle}>Message Scanner</Text>
+        <SettingsButton title="Scanner settings">
+          <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+        </SettingsButton>
+      </View>
       
       <View style={styles.inputContainer}>
         <TextInput
@@ -213,12 +220,19 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 56,
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 18,
+  },
   headerTitle: {
+    flex: 1,
     color: THEME.colors.textPrimary,
     fontSize: THEME.typography.h1,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
-    marginBottom: 18,
   },
   inputContainer: {
     marginBottom: 22,
