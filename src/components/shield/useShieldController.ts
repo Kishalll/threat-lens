@@ -20,6 +20,7 @@ import type {
 import { getKey, setKey, PROTECTED_EXPORT_DIR_URI_KEY } from "../../services/secureKeyService";
 import type { ThemeColors } from "../../constants/theme";
 import { log } from "../../utils/activityLog";
+import { endBusy, startBusy } from "../../stores/busyStore";
 import type { ToastVariant } from "../../hooks/useToast";
 
 export type ShieldMode = "protect" | "verify";
@@ -194,6 +195,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
 
     setProtectStep("signing");
     setErrorMessage(null);
+    startBusy("protect");
 
     try {
       const result = await protectImageWithSignature(protectSourceUri, {
@@ -243,6 +245,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       setErrorMessage(message);
       setProtectStep("error");
     } finally {
+      endBusy();
       if (!isStale()) {
         protectAbortRef.current = null;
         protectCancelledRef.current = false;
@@ -277,6 +280,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     setVerifyLoading(true);
     setVerifyCancelling(false);
     setErrorMessage(null);
+    startBusy("verify");
 
     try {
       const result = await verifySignedImage(verifySourceUri, {
@@ -316,6 +320,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       setErrorMessage(message);
       setVerifyResult(null);
     } finally {
+      endBusy();
       if (!isStale()) {
         verifyAbortRef.current = null;
         verifyCancelledRef.current = false;

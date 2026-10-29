@@ -186,6 +186,13 @@ The Shield area remains exactly:
 - The cloud check always runs; there is no setting to skip it. If pixels are intact but the registry is offline or has no record, status is `INTEGRITY_VERIFIED`.
 - Cloud lookup retrieves the device identity and signed payload to verify the master certificate, the ECDSA signature and revocation status.
 - Verify can be cancelled while it runs, like Protect: the run stops at its next checkpoint, the cloud request is aborted, and no result or error is shown.
+
+### While Protect Or Verify Runs
+
+- The work runs on the JS thread and blocks it, so Android holds taps and would replay them all when the run ends.
+- While a run is busy (`src/stores/busyStore.ts`), the app root (`app/_layout.tsx`) takes every JS tap and drops it. Blocking stays on for 300 ms after the run so held-back taps are dropped too.
+- Cancel and tab swipes keep working because they run on the UI thread, not through JS touches.
+- `BusyBanner` shows above the tab bar on every tab during the run: "Protecting photo." or "Checking image.", then "Taps are paused until it's done."
 - Verification states include:
   - `AUTHENTIC`
   - `INTEGRITY_VERIFIED`

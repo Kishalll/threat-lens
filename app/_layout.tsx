@@ -26,6 +26,7 @@ import { requestNotificationPermissions, setupNotificationChannel } from "../src
 import { useBreachStore } from "../src/stores/breachStore";
 import { useScannerStore } from "../src/stores/scannerStore";
 import { useSettingsStore } from "../src/stores/settingsStore";
+import { isTouchBlocked } from "../src/stores/busyStore";
 import { THEME } from "../src/constants/theme";
 import type { ScanResult } from "../src/types";
 import { log } from "../src/utils/activityLog";
@@ -228,7 +229,8 @@ export default function RootLayout() {
 function ThemedStack() {
   const themed = useThemedStyles();
   return (
-    <View style={themed.container}>
+    // Swallows taps while protect or verify runs. Cancel still works: it is a UI-thread gesture.
+    <View style={themed.container} onStartShouldSetResponderCapture={isTouchBlocked}>
       <Stack
         screenOptions={{
           headerShown: false,
