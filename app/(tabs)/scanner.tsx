@@ -8,6 +8,7 @@ import { THEME } from "../../src/constants/theme";
 import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import ScannerSettings from "../../src/components/scanner/ScannerSettings";
+import { TAB_BAR_CLEARANCE } from "../../src/components/SwipeTabBar";
 
 export default function ScannerScreen() {
   const styles = useStyles();
@@ -179,7 +180,7 @@ export default function ScannerScreen() {
       {scannerStore.history.length === 0 ? (
         <Text style={styles.emptyText}>No manual scans yet. Paste a message above.</Text>
       ) : (
-        <ScrollView style={styles.historyList}>
+        <ScrollView style={styles.historyList} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
           {scannerStore.history.map((record, index) => {
             const statusColor = getStatusColor(record.classification);
             const pendingActions = pendingActionsByScanId.get(record.id) ?? 0;

@@ -8,6 +8,7 @@ import { THEME } from "../../src/constants/theme";
 import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import BreachSettings from "../../src/components/breach/BreachSettings";
+import { TAB_BAR_CLEARANCE } from "../../src/components/SwipeTabBar";
 
 function parseStoredGuidance(value?: string): { actionItems: string[]; isFallback: boolean } | null {
   if (!value) {
@@ -247,7 +248,7 @@ export default function BreachScreen() {
       </View>
       {inputError ? <Text style={styles.inputErrorText}>{inputError}</Text> : null}
 
-      <ScrollView style={styles.listContainer}>
+      <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Monitored Accounts</Text>
         </View>
