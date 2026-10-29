@@ -79,6 +79,26 @@ npx expo run:android --device
 npx expo start --dev-client
 ```
 
+### Physical device over Wi-Fi (wireless debugging)
+
+Handy when the USB connection keeps dropping.
+
+1. On the phone: Developer options > Wireless debugging > Pair device with pairing code.
+2. Pair once, using the address and code from that pop-up:
+
+```bash
+adb pair 192.168.x.x:PAIR_PORT 123456
+```
+
+3. Connect, using the address under "IP address & Port" on the main Wireless debugging screen (a different port):
+
+```bash
+adb connect 192.168.x.x:CONNECT_PORT
+adb reverse tcp:8081 tcp:8081
+```
+
+`adb reverse` lets the app load from Metro at `localhost`, so your firewall and Wi-Fi network don't get in the way.
+
 ### Android Studio Emulator (Windows)
 
 1. Install in Android Studio SDK Manager: Platform API 34+, Build-Tools, Platform-Tools, Command-line Tools, Emulator.
@@ -120,6 +140,51 @@ npx expo start --dev-client
 
 ---
 
+## Native Code and Assets
+
+The `android/` folder is generated and not committed. Its custom parts come from two places:
+
+- `withThreatLensConfig.js` - the notification listener, worker, native module, notification icon and manifest entries. Edit the Kotlin templates here, not the files under `android/`; a prebuild overwrites those.
+- `app.json` - app name, icons, splash and Android settings.
+
+After changing either, regenerate and rebuild:
+
+```bash
+npx expo prebuild --platform android
+npx expo run:android
+```
+
+App and notification icons are rendered from the SVGs in `assets/icon-source/`. After editing one, re-render the PNGs (needs `rsvg-convert` from librsvg) and run the prebuild above:
+
+```bash
+cd assets
+rsvg-convert -w 1024 -h 1024 icon-source/icon.svg -o icon.png
+rsvg-convert -w 1024 -h 1024 icon-source/adaptive-foreground.svg -o adaptive-icon.png
+rsvg-convert -w 1024 -h 1024 icon-source/adaptive-background.svg -o adaptive-icon-background.png
+rsvg-convert -w 1024 -h 1024 icon-source/adaptive-monochrome.svg -o adaptive-icon-monochrome.png
+rsvg-convert -w 1024 -h 1024 icon-source/splash.svg -o splash-icon.png
+rsvg-convert -w 48 -h 48 icon-source/icon.svg -o favicon.png
+for d in mdpi:24 hdpi:36 xhdpi:48 xxhdpi:72 xxxhdpi:96; do
+  rsvg-convert -w ${d##*:} -h ${d##*:} icon-source/notification.svg \
+    -o notification-icon/drawable-${d%%:*}/ic_stat_threatlens.png
+done
+```
+
+Colours come from `useTheme()` / `makeStyles()` in `src/hooks/useTheme.tsx`; don't hard-code colours, so both light and dark themes keep working.
+
+---
+
+## Before Opening a PR
+
+```bash
+npx tsc --noEmit
+npm test
+```
+
+If you change how scanning, breaches, Shield or settings behave, update [docs/behavior-contracts.md](docs/behavior-contracts.md) in the same PR.
+
+---
+
 ## Sharing a Test Build (EAS)
 
 To share the app with testers without requiring a laptop:
@@ -142,19 +207,16 @@ Outputs a download link. The `.env` values are baked in at build time — tester
 
 **`expo` version mismatch in Termux / CI** — run `npm install` first so `npx` picks the local version.
 
+**White screen with "Reloading..."** - the dev build got stuck loading the JS bundle, often because a notification started the app in the background while Metro was down. Force stop it and open it again:
 
-### ToDos
+```bash
+adb shell am force-stop com.anonymous.threatlens
+```
 
-- [x] replace gemini w nim models
-- [x] remove keys in img config tab
-- [ ] add concel btn to cancel and revert img protect
-- [ ] remove spam category
-- [ ] make actions taken in msg allerted to be stored persistantly - now it resets after rebuild
-- [ ] score not fully recovered after completing action items
-- [ ] add subtabs in scan history to view only ine type of classification or only msgs which has pending actions 
-- [ ] add an app settings menu w btn on top right - own api key, themes, notif interception toggle, app laguage(ai responds in mentioned lang)
-- [ ] add app logo
-- [ ] improve text ui
-- [ ] tune model wrt indian scams
+**Red screen "Invalid UTF-8 continuation byte"** - the bundle download was cut off. Tap Reload.
 
+**"Failed to connect to /192.168.x.x:8081" (EHOSTUNREACH)** - the phone can't reach Metro over Wi-Fi. Either load over USB or wireless debugging with `adb reverse tcp:8081 tcp:8081` and `npx expo start --dev-client --localhost`, or open port 8081 in your firewall (firewalld: `sudo firewall-cmd --zone=public --add-port=8081/tcp`).
 
+**Phone disappears from `adb devices` or shows `offline`** - run `adb kill-server && adb devices`; if it stays offline, turn USB debugging off and on. Make sure only one `adb` is installed (`which -a adb`): two versions keep restarting each other's server. Wireless debugging (above) avoids USB drops altogether.
+
+**New app icon doesn't show** - launchers cache icons. Remove and re-add the home-screen shortcut, or restart the launcher.

@@ -4,7 +4,7 @@ Created from the current codebase plus the locked requirements captured in `/tmp
 
 ## Purpose
 
-This document freezes the expected behavior of the current `scan`, `breach`, and `shield` product areas before structure changes.
+This document freezes the expected behavior of the current `scan`, `breach`, `shield` and app-wide settings areas.
 
 Unless the user explicitly changes product behavior, refactors must preserve these contracts.
 
@@ -28,20 +28,42 @@ Unless the user explicitly changes product behavior, refactors must preserve the
   - `UNAVAILABLE`
 - `src/services/nimService.ts` is the source of truth for classifier behavior; guardrails live in `src/services/classificationGuardrails.ts`.
 - NIM execution uses `nvidia/nemotron-3.5-lightning-30b-a3b` as primary and `nvidia/nemotron-3.5-super-vl-120b-a12b` as fallback, with thinking turned off (`chat_template_kwargs.enable_thinking = false`).
+- Structured output is requested with `response_format` (`json_schema`). If a model rejects it with a 400, the same request is retried without it.
 - The killed-app worker (`NotificationWorker.kt`) is generated from `withThreatLensConfig.js`; change the template there, not only the file under `android/`.
 - Deprecated or unavailable models (HTTP 410 or 404) trigger automatic fallback to the next configured model.
+- The prompt treats an unknown or short-code sender as no threat by itself, and a "do not share" warning in an OTP or bank message as a sign the message is genuine.
+- Guardrails, applied after the model:
+  - "Never / do not share your OTP or PIN" sentences are removed before pattern matching, so a safety warning is never read as a credential request.
+  - Bank/UPI transaction alerts and delivery updates that the model flagged are returned to `SAFE` unless they ask for credentials, carry a link shortener, or pair urgency with a personal mobile number or link.
+  - A `SCAM` or `PHISHING` verdict with no supporting threat pattern is kept only at confidence 80 or above; otherwise it becomes `SAFE`.
 - `SAFE` and `PROMO` results must carry no red flags and no suggested actions.
 - `UNAVAILABLE` means AI analysis degraded or could not run; it must not be silently converted into any threat class.
+
+### API Key
+
+- The key in use is chosen in this order: the user's own key saved in Home settings, then the built-in `EXPO_PUBLIC_NIM_API_KEY`, then an older key stored on the device.
+- A user key is saved only after a test request succeeds. A 401/403 means rejected; a 429 counts as working.
+- Whichever key is in use is copied to native shared preferences at startup and after every save or removal, so the killed-app worker uses the same key.
 
 ### Notification Interception Rules
 
 - Foreground active app:
   - JS foreground listener handles interception.
 - Background alive:
-  - Headless JS path handles interception.
+  - Headless JS path handles interception. It does nothing while the app is in the foreground, so a message is never handled twice.
 - Swiped away / process dead:
   - Native fallback may classify and queue results for later recovery.
-- Filtering, low-signal suppression, and dedup rules must continue preventing noisy/system notifications from being classified.
+- The worker treats the app as active only when the saved `app_active` flag is set and the process is really in the foreground, so a stale flag can't stop background scanning.
+- The native listener drops a notification before anything else when scanning is off or the source app is switched off in Scanner settings (shared preference `scanner_settings`).
+- Group summary notifications (`FLAG_GROUP_SUMMARY`) are skipped; they repeat the chat notification as "Sender: text".
+- The native listener remembers recent messages for 6 hours (at most 300) and skips repeats, including old messages re-posted when a new one arrives.
+- A message counts as cut off only when the text read ends with "..." or "…". Long messages delivered in full (MessagingStyle or big text) are scanned normally.
+- A cut-off preview is still scanned. A `SCAM` or `PHISHING` result alerts as usual; anything else sends one paste prompt, if paste prompts are on.
+- In-app and background paths share the filters in `src/utils/notificationFilters.ts`:
+  - only supported messaging and email apps
+  - system noise, ongoing and service notifications are dropped
+  - for messaging apps, media labels without a caption and chat of three words or fewer with no digits are skipped, unless the text mentions a common lure (link, OTP, KYC, bank, refund and similar)
+- Skipped notifications are not classified and not stored.
 - Stacked messaging notifications must prefer the latest unread message, not the combined unread stack.
 
 ### History And Persistence
@@ -56,11 +78,13 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 - History ordering must reflect scan execution order, newest first in the UI.
 - History must survive relaunch.
 - Duplicate scan records must be suppressed by stable scan id.
+- Retention follows the "Keep history" setting (30 days, 90 days, custom, forever). Older scans are deleted from the database when history loads, after each new scan, and when the setting changes. A shorter setting that would delete saved scans asks first.
+- Clear scan history deletes every saved scan from the database, not only from the screen, and resyncs the dashboard.
 
 ### Alerts And Routing
 
-- `PROMO` may trigger a promotional alert.
-- `SPAM`, `SCAM`, and `PHISHING` may trigger a threat alert.
+- `PROMO` may trigger a promotional alert, only when promo alerts are on.
+- `SCAM` and `PHISHING` may trigger a threat alert.
 - Tapping a scan alert opens the scan result screen with the encoded result payload.
 - If the app cold-starts from a notification-opened scan result, Android back and header back must land on Scanner, not exit the app.
 - Paste-prompt alerts must route to Scanner with prefilled text.
@@ -95,9 +119,15 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 - Breaches are sorted newest first by breach date.
 - Active breach count for the dashboard reflects unresolved breaches.
 
+### Background Checks
+
+- The background task runs only when background checks are on, every 6, 12 or 24 hours (default 6). Android may run it later to save battery.
+- `syncBreachCheckTask` registers or removes the task only when the saved setting differs from what is registered, because registering restarts Android's timer.
+- When Android runs the task with the app closed, it loads settings and monitored accounts itself before checking.
+
 ### Notifications
 
-- When `notifyOnNew` is enabled and new breaches are found, the app sends a local breach alert.
+- When `notifyOnNew` is enabled, breach alerts are on and new breaches are found, the app sends a local breach alert. The background task follows the same alerts setting.
 - Tapping a single-breach alert deep-links to that breach detail.
 - Tapping a multi-breach alert deep-links to the breach list.
 
@@ -124,9 +154,9 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 
 The Shield area remains exactly:
 
-- sign image
-- verify signed image
-- trust/settings management
+- sign image (Protect)
+- verify signed image (Verify)
+- export folder and device trust state, shown in the Shield settings card behind the gear
 
 ### Protect Flow
 
@@ -136,15 +166,17 @@ The Shield area remains exactly:
 - EXIF metadata is not used for storing protection payloads.
 - Successful protect flow increments the dashboard protected-image count.
 - User can save the watermarked image.
+- Protect can be cancelled while it runs. "Cancelling..." shows on the frame the user taps (gesture handled on the UI thread), the run stops at its next checkpoint, a written file is deleted, and nothing is uploaded.
 
 ### Verify Flow
 
 - User selects an image.
 - App extracts the DCT watermark from image frequencies.
-- If no valid watermark or sync prefix is found, status is `NO_PROTECTION`.
-- Local check compares the extracted perceptual hash with the current image pixels to detect visual tampering.
-- If pixels are intact but cloud check is skipped or offline, status is `INTEGRITY_VERIFIED`.
-- Cloud lookup retrieves the device identity and signed payload to verify ECDSA signature, master certificate, and revocation status.
+- If the file can't be read, status is `CORRUPT`. If it is not a JPEG or no valid watermark or sync prefix is found, status is `NO_PROTECTION`.
+- Local check compares the extracted perceptual hash with the current image pixels (distance threshold 8) to detect visual tampering.
+- The cloud check always runs; there is no setting to skip it. If pixels are intact but the registry is offline or has no record, status is `INTEGRITY_VERIFIED`.
+- Cloud lookup retrieves the device identity and signed payload to verify the master certificate, the ECDSA signature and revocation status.
+- Verify can be cancelled while it runs, like Protect: the run stops at its next checkpoint, the cloud request is aborted, and no result or error is shown.
 - Verification states include:
   - `AUTHENTIC`
   - `INTEGRITY_VERIFIED`
@@ -152,15 +184,15 @@ The Shield area remains exactly:
   - `INVALID_SIGNATURE`
   - `CLONE_APP`
   - `REVOKED`
-  - `OFFLINE`
+  - `OFFLINE` (kept as a status type; Verify currently reports an unreachable registry as `INTEGRITY_VERIFIED`)
   - `NO_PROTECTION`
   - `CORRUPT`
 
 ### Settings Flow
 
-- Registry base URL, registry API key, and master public key remain editable.
-- Settings load from secure storage and save back to secure storage.
-- Device trust snapshot remains visible when available.
+- The Shield settings card shows the protected export folder (change or reset) and a read-only device trust state: install ID, device key, master cert, master public key and registry API key.
+- The trust state is re-read each time the card opens.
+- Registry endpoints and keys come from the environment and secure storage; they are not edited in the app.
 - `src/services/secureKeyService.ts` resolves endpoints across Cloudflare Worker subdomains (`threatlens-register`, `threatlens-verify`, and `threatlens-image`) as well as path-based URLs (`/register`, `/verify`, `/image`).
 - Explicit environment overrides (`EXPO_PUBLIC_TRUST_REGISTRY_REGISTER_URL`, `EXPO_PUBLIC_TRUST_REGISTRY_VERIFY_URL`, and `EXPO_PUBLIC_TRUST_REGISTRY_IMAGE_URL`) take precedence when set.
 - Remote Cloudflare D1 database maintains two tables: `trust_registry` for device identities and `image_registry` for DCT-watermarked image payloads.
@@ -171,11 +203,49 @@ The Shield area remains exactly:
 - Existing folder selection can be changed or reset.
 - Save-to-folder retry behavior after expired permissions remains unchanged.
 
+## App Settings
+
+### Where Settings Live
+
+- Every tab has a gear at the top right that opens that tab's settings card (`src/components/settings/`).
+- Settings are stored as one JSON row in the SQLite `app_settings` table. `mergeSettings` in `src/utils/settings.ts` fills missing or invalid values with defaults, so older saves keep working.
+- Scanner settings are also copied to native shared preferences, because the native listener and the killed-app worker read them without JS.
+- Destructive actions confirm with the in-app `ConfirmDialog`, not the system alert.
+
+### Defaults
+
+- Scanning on, all apps on, promo alerts on, paste prompts on, history kept forever.
+- Background breach checks on, every 6 hours, breach alerts on.
+- Theme dark, app lock off.
+
+### General (Home)
+
+- NVIDIA API key: test, save, remove, as described under Scan > API Key.
+- Theme: dark, light or system. System follows the phone's setting live.
+- App lock: asks for fingerprint, face or phone PIN when the app opens and when it returns after more than 30 seconds away. Turning it on or off requires one successful unlock. It needs a phone screen lock.
+- Clear all data wipes scan history, monitored accounts, breach results, suggestion progress, settings, the saved NVIDIA key, the protected-folder choice and pending background scans. It keeps the device identity (install ID, signing key, master cert) and images already saved.
+
+### Scanner
+
+- Scan incoming notifications (master switch), per-app switches for supported apps installed on the phone, promo alerts, ask to paste cut-off messages, keep history, clear history.
+- The installed-app list needs the `<queries>` package entries that `withThreatLensConfig.js` adds to the manifest. Keep that list in step with `ALLOWED_MESSAGING_PACKAGES` in `src/utils/notificationFilters.ts`.
+
+### Breach
+
+- Background checks, check interval, breach alerts.
+
+## UI And Assets
+
+- Tabs are a swipeable pager (`@react-navigation/material-top-tabs` with the bar at the bottom). The custom `SwipeTabBar` follows the pager position. Scrolling tab screens leave `TAB_BAR_CLEARANCE` at the bottom so the floating bar never covers content.
+- Colours come only from `useTheme()` / `makeStyles()` in `src/hooks/useTheme.tsx`. `THEME` holds sizes and fonts only. Dark and light palettes live in `src/constants/theme.ts` with the same names.
+- App icon, adaptive icon, themed-icon layer, splash image and notification icon are rendered from SVG sources in `assets/icon-source/`. The notification icon (`ic_stat_threatlens`) is copied into `android/` by `withThreatLensConfig.js` and tinted mint.
+
 ## Refactor Guardrails
 
-- Do not change classification semantics in `src/services/nimService.ts`.
+- Do not change classification semantics in `src/services/nimService.ts` or `src/services/classificationGuardrails.ts`.
 - Do not change score math in `src/utils/scoreCalculator.ts`.
 - Do not change breach-removal behavior.
 - Do not expand or shrink Shield product scope.
 - Do not destabilize the working notification execution modes.
+- Native files under `android/` are generated. Change `withThreatLensConfig.js` or `app.json`, then run `npx expo prebuild --platform android`.
 - Prefer extracting deep modules behind explicit seams over adding more thin pass-through helpers.

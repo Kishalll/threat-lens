@@ -74,3 +74,13 @@ For next install on same project:
 4. Run app
 
 No manual cloud provisioning steps are needed unless backend changes.
+
+## F. Dev build troubleshooting
+
+Full details are in [CONTRIBUTING.md](../CONTRIBUTING.md#troubleshooting).
+
+- White screen with "Reloading...": `adb shell am force-stop com.anonymous.threatlens`, then open the app again.
+- Red screen "Invalid UTF-8 continuation byte": the bundle download was cut off; tap Reload.
+- `EHOSTUNREACH` to `...:8081`: the phone can't reach Metro. Use `adb reverse tcp:8081 tcp:8081` with `npx expo start --dev-client --localhost`, or open port 8081 in your firewall.
+- Phone missing or `offline` in `adb devices`: `adb kill-server && adb devices`, toggle USB debugging, and keep a single `adb` install. Wireless debugging (`adb pair`, then `adb connect`) avoids USB drops.
+- After changing `app.json`, icons or `withThreatLensConfig.js`: `npx expo prebuild --platform android`, then `npx expo run:android`.

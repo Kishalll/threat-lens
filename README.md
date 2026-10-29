@@ -13,56 +13,63 @@ ThreatLens is an Expo React Native app for personal digital safety. It helps you
 
 ### Image Protection & Verification
 
-This is the core feature. It lets you cryptographically sign an image so anyone can later verify it hasn't been altered.
+This is the core feature. It lets you sign an image so anyone can later check that it hasn't been altered and where it came from.
 
 **How it works:**
 
-When you first use the app, it generates a unique key pair (P-256 ECDSA) for your device and registers it with the trust registry backend (Cloudflare Workers + D1). The backend signs a certificate binding your device identity to your public key - similar to how HTTPS certificates work, but for devices.
+When you first use the app, it generates a unique key pair (P-256 ECDSA) for your device and registers it with the trust registry backend (Cloudflare Workers + D1). The backend signs a certificate binding your device identity to your public key, similar to how HTTPS certificates work, but for devices.
 
 **Protecting an image:**
 
 When you protect an image, the app:
-1. Computes a SHA-256 hash of the raw pixel data
-2. Computes a perceptual hash (dHash) - a fingerprint based on visual content
-3. Signs all of this (plus your device identity, timestamp, certificate) with your private key
-4. Embeds the signed payload into the image's EXIF metadata - no visible change to the image
+1. Computes a SHA-256 hash of the raw pixels and a perceptual hash (dHash), a fingerprint of the visual content
+2. Hides a 128-bit watermark in the image's frequency data (DCT): a 64-bit lookup ID plus the 64-bit perceptual hash
+3. Signs a payload (device identity, certificate, hashes, timestamp) with your device's private key
+4. Uploads the signed payload to the cloud image registry, keyed by the watermark
 
-The signed image looks identical. The proof is invisible, stored in the file itself.
+The watermark is invisible and survives normal JPEG saving. Nothing is stored in EXIF metadata. You can cancel while it runs; a cancelled run keeps nothing and uploads nothing.
 
 **Verifying an image:**
 
-When you verify an image, the app runs four checks in order:
+The app reads the watermark from the image, then checks it locally and against the cloud registry. The cloud check always runs. You can cancel while it runs.
 
 | Check | What it does |
 |---|---|
-| Hash check | Recomputes SHA-256 of pixel data, compares to signed value |
-| Signature check | Verifies the ECDSA signature using the embedded public key |
-| Master cert check | Verifies the device certificate was signed by the app's master key |
-| Cloud check | Calls the trust registry to confirm the device is still active and not revoked |
+| Watermark | Finds the hidden DCT watermark; without one the image was never protected |
+| Tamper check | Compares the perceptual hash in the watermark with the image as it is now |
+| Master cert check | Confirms the signing device's certificate came from the app's master key |
+| Signature check | Verifies the ECDSA signature on the payload from the registry |
+| Device check | Asks the registry whether the signing device is still active or was revoked |
 
 **Possible results:**
 
 | Result | What it means | Real-life trigger |
 |---|---|---|
-| `AUTHENTIC` | All 4 checks passed | Image is exactly as captured, from a real trusted device |
-| `TAMPERED` | Pixel hash mismatch | Someone edited the image - cropped, filtered, face-swapped, or added text after signing |
-| `INVALID_SIGNATURE` | Crypto signature broken | Someone tampered with the EXIF payload itself, or built a fake one without a real private key |
-| `CLONE_APP` | Master cert invalid | Image was signed by a fake or modified version of the app, not a real install |
-| `REVOKED` | Device revoked in registry | Signing phone was stolen, compromised, or manually removed from the trust registry |
-| `OFFLINE` | Cloud check unreachable | Local checks passed but no internet — device status couldn't be confirmed |
+| `AUTHENTIC` | Every check passed | Image is as it was signed, by a real trusted install |
+| `INTEGRITY_VERIFIED` | Pixels are intact, source not confirmed | No internet, or the registry has no record of the image |
+| `TAMPERED` | Visual content changed after signing | Cropped, filtered, face-swapped or text added |
+| `CLONE_APP` | Master certificate invalid | Signed by a fake or modified copy of the app |
+| `INVALID_SIGNATURE` | Signature on the payload is broken | The registry record was altered or forged |
+| `REVOKED` | Signing device revoked in the registry | The phone was stolen, compromised or removed from the registry |
+| `NO_PROTECTION` | No watermark found | The image was never protected, or isn't a JPEG |
+| `CORRUPT` | File unreadable, or device validation failed | Damaged file, or the registry rejected the device |
 
 ---
 
 ### Message Threat Scanner
 
-Scans text messages, links, or anything suspicious for scams, phishing, and spam using NVIDIA NIM AI.
+Scans text messages, links, or anything suspicious for scams and phishing using NVIDIA NIM AI.
 
 Three ways to scan:
-- **Automatic** - grant notification access and the app reads incoming messages from WhatsApp, SMS, Telegram, Gmail, and other messaging apps in the background. If a threat is detected, you get an alert notification instantly
+- **Automatic** - grant notification access and the app reads incoming messages from WhatsApp, SMS, Telegram, Gmail, and other messaging apps, even when the app is closed. If a threat is detected, you get an alert notification instantly
 - **Paste** - copy any message and paste it directly into the scanner
 - **Share** - share text from any app directly into ThreatLens using Android's share sheet
 
-Classifies as `SAFE`, `PROMO`, `SPAM`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing). Multilingual - understands Hindi, Bengali, Tamil, Telugu, Marathi, and other major Indian languages. Falls back to a secondary NIM model if the primary is rate-limited.
+Classifies as `SAFE`, `PROMO`, `SCAM`, or `PHISHING`, with a confidence score, red flags, and suggested actions. Tuned for the Indian context (UPI scams, OTP fraud, KYC phishing): bank alerts and OTPs that warn "do not share" are recognised as genuine. Multilingual - understands Hindi, Bengali, Tamil, Telugu, Marathi, and other major Indian languages. Falls back to a secondary NIM model if the primary is unavailable.
+
+Short chit-chat ("ok", "hi"), stickers and media without a caption are skipped to save API calls. Short messages that mention a link, OTP, bank or similar are always scanned.
+
+From the Scanner settings you can turn automatic scanning off, choose which apps are scanned, turn promo alerts and "paste the full message" prompts on or off, and choose how long scan history is kept.
 
 ---
 
@@ -73,13 +80,25 @@ Checks if your email or username has appeared in known data breaches.
 - Uses two sources: XposedOrNot and LeakCheck
 - Shows which breach, when it happened, and what data was exposed
 - Generates AI-powered recovery guidance via NVIDIA NIM for each breach
-- Background alerts notify you when new breaches are detected
+- Background checks every 6, 12 or 24 hours, with alerts when new breaches are found; both can be turned off
 
 ---
 
 ### Safety Dashboard
 
 A home screen dashboard gives you an at-a-glance safety score (0–100) calculated from your current breach exposure, threat scan history, and how many images you've protected. The score updates as you act on suggestions — resolving breaches, protecting images, and following recommended actions all improve it.
+
+---
+
+### Settings and Personalisation
+
+Every tab has a gear at the top right with its own settings.
+
+- **Your own NVIDIA key** - paste and test your own NIM API key; every scan then uses it, even when the app is closed
+- **Theme** - dark, light, or follow your phone
+- **App lock** - fingerprint, face or phone PIN when you open the app or come back after 30 seconds
+- **Clear all data** - wipes history, accounts, results and settings, but keeps your device identity and saved images
+- **Swipe between tabs** - swipe left or right anywhere to move between Home, Scanner, Shield and Breaches
 
 ---
 
