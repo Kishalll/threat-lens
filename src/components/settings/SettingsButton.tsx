@@ -6,18 +6,22 @@ import SettingsModal from "./SettingsModal";
 
 interface SettingsButtonProps {
   title: string;
+  onOpen?: () => void;
   children: React.ReactNode;
 }
 
 // Gear for the top right of a tab header; opens that tab's settings card.
-export default function SettingsButton({ title, children }: SettingsButtonProps) {
+export default function SettingsButton({ title, onOpen, children }: SettingsButtonProps) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <Pressable
         style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          setOpen(true);
+          onOpen?.();
+        }}
         accessibilityRole="button"
         accessibilityLabel={`Open ${title}`}
         hitSlop={8}

@@ -1,8 +1,9 @@
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { THEME } from "../../constants/theme";
+import { SettingsRow, SettingsSection } from "../settings/SettingsControls";
 
 interface DeviceSnapshot {
   installID: string | null;
@@ -15,7 +16,6 @@ interface DeviceSnapshot {
 }
 
 interface SettingsPanelProps {
-  styles: any;
   settingsLoading: boolean;
   protectedFolderDisplay: string;
   deviceSnapshot: DeviceSnapshot | null;
@@ -24,8 +24,15 @@ interface SettingsPanelProps {
   onResetFolder: () => void;
 }
 
+function Presence({ present }: { present: boolean }) {
+  return (
+    <Text style={[styles.value, { color: present ? THEME.colors.accent : THEME.colors.danger }]}>
+      {present ? "Present" : "Missing"}
+    </Text>
+  );
+}
+
 export default function SettingsPanel({
-  styles,
   settingsLoading,
   protectedFolderDisplay,
   deviceSnapshot,
@@ -33,88 +40,139 @@ export default function SettingsPanel({
   onChangeFolder,
   onResetFolder,
 }: SettingsPanelProps) {
-  const okColor = THEME.colors.accent;
-  const badColor = THEME.colors.danger;
+  if (settingsLoading && !deviceSnapshot) {
+    return (
+      <View style={styles.loadingRow}>
+        <ActivityIndicator size="small" color={THEME.colors.accent} />
+        <Text style={styles.loadingText}>Loading trust settings...</Text>
+      </View>
+    );
+  }
+
+  const statusColor = isAllSet ? THEME.colors.accent : THEME.colors.danger;
 
   return (
-    <View style={styles.card}>
-      {settingsLoading ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator size="small" color={THEME.colors.accent} />
-          <Text style={styles.loadingText}>Loading trust settings...</Text>
-        </View>
-      ) : (
-        <>
-          {Platform.OS === "android" ? (
-            <View style={styles.folderManagementCard}>
-              <Text style={styles.resultTitle}>Protected Export Folder</Text>
-              <Text style={[styles.resultLine, { fontSize: 15, color: THEME.colors.textPrimary }]}>{protectedFolderDisplay}</Text>
-              <View style={styles.settingsActionsRow}>
-                <Pressable
-                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-                  onPress={onChangeFolder}
-                >
-                  <Feather name="folder-plus" size={16} color={THEME.colors.textPrimary} />
-                  <Text style={styles.secondaryButtonText}>Change Folder</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-                  onPress={onResetFolder}
-                >
-                  <Feather name="rotate-ccw" size={16} color={THEME.colors.textPrimary} />
-                  <Text style={styles.secondaryButtonText}>Reset</Text>
-                </Pressable>
-              </View>
+    <>
+      {Platform.OS === "android" ? (
+        <SettingsSection title="Protected export folder">
+          <View style={styles.folderBody}>
+            <Text style={styles.folderText}>{protectedFolderDisplay}</Text>
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                onPress={onChangeFolder}
+              >
+                <Feather name="folder-plus" size={16} color={THEME.colors.textPrimary} />
+                <Text style={styles.actionText}>Change folder</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                onPress={onResetFolder}
+              >
+                <Feather name="rotate-ccw" size={16} color={THEME.colors.textPrimary} />
+                <Text style={styles.actionText}>Reset</Text>
+              </Pressable>
             </View>
-          ) : null}
+          </View>
+        </SettingsSection>
+      ) : null}
 
-          {deviceSnapshot ? (
-            <View
-              style={[
-                styles.snapshotCard,
-                { borderColor: isAllSet ? okColor : badColor },
-              ]}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <Text style={styles.resultTitle}>Device Trust State</Text>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    backgroundColor: isAllSet ? `${okColor}22` : `${badColor}22`,
-                    paddingHorizontal: 8,
-                    paddingVertical: 2,
-                    borderRadius: THEME.radius.pill,
-                    borderWidth: 1,
-                    borderColor: isAllSet ? `${okColor}66` : `${badColor}66`,
-                  }}
-                >
-                  <Feather name={isAllSet ? "check-circle" : "alert-circle"} size={12} color={isAllSet ? okColor : badColor} />
-                  <Text style={{ color: isAllSet ? okColor : badColor, fontSize: 11, fontWeight: "700", fontFamily: THEME.fontFamily.dmSans }}>
-                    {isAllSet ? "All Set" : "Needs Action"}
-                  </Text>
-                </View>
+      {deviceSnapshot ? (
+        <SettingsSection title="Device trust state">
+          <SettingsRow
+            first
+            label="Status"
+            right={
+              <View style={[styles.chip, { borderColor: statusColor, backgroundColor: `${statusColor}22` }]}>
+                <Feather name={isAllSet ? "check-circle" : "alert-circle"} size={12} color={statusColor} />
+                <Text style={[styles.chipText, { color: statusColor }]}>{isAllSet ? "All set" : "Needs action"}</Text>
               </View>
-              <Text style={styles.resultLine}>
-                Install ID: <Text style={{ color: deviceSnapshot.installID ? okColor : badColor }}>{deviceSnapshot.installID ?? "Not generated"}</Text>
+            }
+          />
+          <SettingsRow
+            label="Install ID"
+            right={
+              <Text style={[styles.mono, !deviceSnapshot.installID && { color: THEME.colors.danger }]} numberOfLines={1}>
+                {deviceSnapshot.installID ?? "Not generated"}
               </Text>
-              <Text style={styles.resultLine}>
-                Device key: <Text style={{ color: deviceSnapshot.hasDeviceKey ? okColor : badColor }}>{deviceSnapshot.hasDeviceKey ? "Present" : "Missing"}</Text>
-              </Text>
-              <Text style={styles.resultLine}>
-                Master cert: <Text style={{ color: deviceSnapshot.hasMasterCert ? okColor : badColor }}>{deviceSnapshot.hasMasterCert ? "Present" : "Missing"}</Text>
-              </Text>
-              <Text style={styles.resultLine}>
-                API key: <Text style={{ color: deviceSnapshot.hasApiKey ? okColor : badColor }}>{deviceSnapshot.hasApiKey ? "Present" : "Missing"}</Text>
-              </Text>
-              <Text style={styles.resultLine}>
-                Master public key: <Text style={{ color: deviceSnapshot.hasMasterPublicKey ? okColor : badColor }}>{deviceSnapshot.hasMasterPublicKey ? "Present" : "Missing"}</Text>
-              </Text>
-            </View>
-          ) : null}
-        </>
-      )}
-    </View>
+            }
+          />
+          <SettingsRow label="Device key" right={<Presence present={deviceSnapshot.hasDeviceKey} />} />
+          <SettingsRow label="Master cert" right={<Presence present={deviceSnapshot.hasMasterCert} />} />
+          <SettingsRow label="Master public key" right={<Presence present={deviceSnapshot.hasMasterPublicKey} />} />
+          <SettingsRow label="Registry API key" right={<Presence present={deviceSnapshot.hasApiKey} />} />
+        </SettingsSection>
+      ) : null}
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  loadingText: {
+    color: THEME.colors.textSecondary,
+    fontFamily: THEME.fontFamily.dmSans,
+  },
+  folderBody: {
+    padding: 14,
+    gap: 12,
+  },
+  folderText: {
+    color: THEME.colors.textPrimary,
+    fontFamily: THEME.fontFamily.dmSans,
+    fontSize: THEME.typography.body,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: THEME.radius.sm,
+    borderWidth: 1,
+    borderColor: THEME.colors.borderStrong,
+  },
+  actionText: {
+    color: THEME.colors.textPrimary,
+    fontFamily: THEME.fontFamily.dmSans,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: THEME.radius.pill,
+    borderWidth: 1,
+  },
+  chipText: {
+    fontFamily: THEME.fontFamily.dmSans,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  value: {
+    fontFamily: THEME.fontFamily.dmSans,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  mono: {
+    maxWidth: 150,
+    color: THEME.colors.textSecondary,
+    fontFamily: THEME.fontFamily.jetbrainsMono,
+    fontSize: 12,
+  },
+});

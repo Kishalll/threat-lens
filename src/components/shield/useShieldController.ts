@@ -25,7 +25,7 @@ import { THEME } from "../../constants/theme";
 import { log } from "../../utils/activityLog";
 import type { ToastVariant } from "../../hooks/useToast";
 
-export type ShieldMode = "protect" | "verify" | "settings";
+export type ShieldMode = "protect" | "verify";
 export type ProtectStep = "idle" | "picked" | "signing" | "cancelling" | "done" | "error";
 
 interface ShieldDeviceSnapshot {
@@ -422,11 +422,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     setErrorMessage(null);
   }, []);
 
-  const modeTitle = useMemo(() => {
-    if (mode === "protect") return "Protect";
-    if (mode === "verify") return "Verify";
-    return "Settings";
-  }, [mode]);
+  const modeTitle = mode === "protect" ? "Protect" : "Verify";
 
   const isAllSet = useMemo(() => {
     if (!deviceSnapshot) return false;
@@ -462,6 +458,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     pickVerifyImage,
     resetProtectState,
     resetProtectedFolder,
+    refreshSettings: loadSettings,
     resetVerifyState,
     runProtectFlow,
     runVerifyFlow,

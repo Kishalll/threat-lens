@@ -19,7 +19,6 @@ import {
 import { useToast } from "../../src/hooks/useToast";
 import { THEME } from "../../src/constants/theme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
-import { SettingsNote } from "../../src/components/settings/SettingsControls";
 
 export default function ShieldScreen() {
   const insets = useSafeAreaInsets();
@@ -44,6 +43,7 @@ export default function ShieldScreen() {
     changeProtectedFolder,
     pickProtectImage,
     pickVerifyImage,
+    refreshSettings,
     resetProtectState,
     resetProtectedFolder,
     resetVerifyState,
@@ -58,8 +58,19 @@ export default function ShieldScreen() {
     <View style={styles.container}>
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Image Shield</Text>
-        <SettingsButton title="Shield settings">
-          <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+        <SettingsButton title="Shield settings" onOpen={() => void refreshSettings()}>
+          <SettingsPanel
+            settingsLoading={settingsLoading}
+            protectedFolderDisplay={protectedFolderDisplay}
+            deviceSnapshot={deviceSnapshot}
+            isAllSet={isAllSet}
+            onChangeFolder={() => {
+              void changeProtectedFolder();
+            }}
+            onResetFolder={() => {
+              void resetProtectedFolder();
+            }}
+          />
         </SettingsButton>
       </View>
       <Text style={styles.subtitle}>
@@ -67,7 +78,7 @@ export default function ShieldScreen() {
       </Text>
 
       <View style={styles.modeSwitcher}>
-        {(["protect", "verify", "settings"] as ShieldMode[]).map((value) => {
+        {(["protect", "verify"] as ShieldMode[]).map((value) => {
           const active = mode === value;
           return (
             <Pressable
@@ -133,22 +144,6 @@ export default function ShieldScreen() {
               void runVerifyFlow();
             }}
             onToggleCloudCheck={setVerifyCloudCheck}
-          />
-        ) : null}
-
-        {mode === "settings" ? (
-          <SettingsPanel
-            styles={styles}
-            settingsLoading={settingsLoading}
-            protectedFolderDisplay={protectedFolderDisplay}
-            deviceSnapshot={deviceSnapshot}
-            isAllSet={isAllSet}
-            onChangeFolder={() => {
-              void changeProtectedFolder();
-            }}
-            onResetFolder={() => {
-              void resetProtectedFolder();
-            }}
           />
         ) : null}
 
@@ -282,29 +277,6 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
-  snapshotCard: {
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.surfaceMuted,
-    padding: 12,
-    gap: 6,
-  },
-  folderManagementCard: {
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
-    borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.surfaceMuted,
-    padding: 12,
-    gap: 8,
-  },
-  settingsActionsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
   statusHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -334,15 +306,6 @@ const styles = StyleSheet.create({
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     lineHeight: 16,
-  },
-  loadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  loadingText: {
-    color: THEME.colors.textSecondary,
-    fontFamily: THEME.fontFamily.dmSans,
   },
   inputLabel: {
     color: THEME.colors.textPrimary,
