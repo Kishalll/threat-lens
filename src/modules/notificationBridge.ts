@@ -2,6 +2,7 @@ import { NativeModules, NativeEventEmitter, Platform, AppState } from "react-nat
 import { sendLocalNotification } from "../services/notificationService";
 import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { log } from "../utils/activityLog";
 import {
   isLikelyMessagingPackage,
@@ -287,6 +288,10 @@ export function initializeNotificationInterceptor() {
       // A cut-off preview is only trusted when it already looks like a threat;
       // otherwise ask the user for the full text.
       if (isTruncated && !DANGEROUS_CLASSIFICATIONS.has(scanResult.classification)) {
+        if (!useSettingsStore.getState().settings.scanner.pastePrompts) {
+          log("alert_skipped", `paste prompts off | ${packageName}`);
+          return;
+        }
         if (!shouldPromptForTruncated(packageName)) {
           log("dedup_skip", `truncated prompt cooldown for ${packageName}`);
           return;
@@ -303,6 +308,10 @@ export function initializeNotificationInterceptor() {
       const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(scanResult))));
 
       if (scanResult.classification === PROMO_CLASSIFICATION) {
+        if (!useSettingsStore.getState().settings.scanner.promoAlerts) {
+          log("alert_skipped", `promo alerts off | ${packageName}`);
+          return;
+        }
         log("alert_sent", `PROMO from ${packageName}`);
         await sendLocalNotification(
           "Promotional Message Detected",

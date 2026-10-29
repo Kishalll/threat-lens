@@ -299,6 +299,14 @@ export async function getScanResult(id: string): Promise<ScanResult | null> {
   return toScanResult(row as Record<string, unknown>);
 }
 
+export async function deleteAllScanResults(): Promise<void> {
+  await withDatabase((database) => database.runAsync("DELETE FROM scan_results"));
+}
+
+export async function deleteScanResultsBefore(timestamp: number): Promise<void> {
+  await withDatabase((database) => database.runAsync("DELETE FROM scan_results WHERE timestamp < ?", [timestamp]));
+}
+
 export async function getSettingsJson(): Promise<string | null> {
   const row = await withDatabase((database) =>
     database.getFirstAsync("SELECT value FROM app_settings WHERE key = ?", [SETTINGS_ROW_KEY])

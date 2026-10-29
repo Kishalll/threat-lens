@@ -2,6 +2,25 @@ const fs = require('fs');
 const path = require('path');
 const { withAndroidManifest, withMainApplication, withDangerousMod, withAppBuildGradle } = require('@expo/config-plugins');
 
+// Apps the Scanner settings can list. Android 11+ hides other apps unless they are
+// declared in <queries>. Keep in sync with ALLOWED_MESSAGING_PACKAGES in
+// src/utils/notificationFilters.ts.
+const SUPPORTED_MESSAGING_PACKAGES = [
+  'com.whatsapp', 'com.whatsapp.w4b', 'com.google.android.apps.messaging',
+  'com.google.android.apps.googlevoice', 'com.android.mms', 'com.samsung.android.messaging',
+  'com.sonyericsson.conversations', 'com.miui.smsextra', 'com.oneplus.mms',
+  'com.oplus.message', 'com.coloros.message', 'com.vivo.messaging',
+  'com.htc.sense.mms', 'com.huawei.message', 'org.telegram.messenger',
+  'org.telegram.plus', 'org.thoughtcrime.securesms', 'com.facebook.orca',
+  'com.instagram.android', 'com.discord', 'jp.naver.line.android',
+  'com.tencent.mm', 'com.viber.voip', 'com.kakao.talk',
+  'com.zing.zalo', 'com.skype.raider', 'com.microsoft.teams',
+  'com.bbm', 'com.google.android.gm', 'com.microsoft.office.outlook',
+  'com.yahoo.mobile.client.android.mail', 'ch.protonmail.android', 'com.samsung.android.email.provider',
+  'com.sonyericsson.email', 'com.tencent.androidqqmail', 'com.my.mail',
+  'com.readdle.spark',
+];
+
 function withThreatLensManifest(config) {
   return withAndroidManifest(config, async config => {
     const androidManifest = config.modResults;
@@ -42,6 +61,18 @@ function withThreatLensManifest(config) {
           'android:exported': 'false',
         }
       });
+    }
+
+    if (!androidManifest.manifest.queries) {
+      androidManifest.manifest.queries = [{}];
+    }
+    const queries = androidManifest.manifest.queries[0];
+    queries.package = queries.package || [];
+    const declared = new Set(queries.package.map(p => p.$['android:name']));
+    for (const name of SUPPORTED_MESSAGING_PACKAGES) {
+      if (!declared.has(name)) {
+        queries.package.push({ $: { 'android:name': name } });
+      }
     }
 
     // Add ACTION_SEND intent filter to MainActivity
@@ -162,6 +193,7 @@ import androidx.work.Data
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
+import org.json.JSONObject
 
 class NotificationService : NotificationListenerService() {
 
@@ -175,6 +207,8 @@ class NotificationService : NotificationListenerService() {
     const val EXTRA_CATEGORY = "category"
     const val EXTRA_IS_ONGOING = "isOngoing"
     private const val DEBUG_TAG = "ThreatLensNotif"
+    private const val PREFS_NAME = "threatlens_prefs"
+    private const val PREFS_SCANNER_SETTINGS = "scanner_settings"
 
     // Apps re-post old messages when a new one arrives, so remember them for a while.
     private const val DEDUP_WINDOW_MS = 6 * 60 * 60 * 1000L
@@ -198,6 +232,10 @@ class NotificationService : NotificationListenerService() {
     }
 
     if (sbn.packageName == packageName) {
+      return
+    }
+
+    if (!isScanningAllowed(sbn.packageName)) {
       return
     }
 
@@ -375,6 +413,26 @@ class NotificationService : NotificationListenerService() {
       sourcePackage.endsWith(".sms")
   }
 
+  // Scanner switches from the app's settings. Missing or unreadable settings mean everything is on.
+  private fun isScanningAllowed(sourcePackage: String): Boolean {
+    val raw = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_SCANNER_SETTINGS, null) ?: return true
+    return try {
+      val settings = JSONObject(raw)
+      if (!settings.optBoolean("interceptionEnabled", true)) {
+        Log.d(DEBUG_TAG, "[DEBUG-notif] scanning off skip pkg=\${sourcePackage}")
+        return false
+      }
+      val disabledApps = settings.optJSONArray("disabledApps")
+      val isAppOff = disabledApps != null && (0 until disabledApps.length()).any { disabledApps.optString(it) == sourcePackage }
+      if (isAppOff) {
+        Log.d(DEBUG_TAG, "[DEBUG-notif] app off skip pkg=\${sourcePackage}")
+      }
+      !isAppOff
+    } catch (_: Exception) {
+      true
+    }
+  }
+
   // Long messages usually arrive in full (MessagingStyle or big text), so only
   // treat the text as cut off when the app itself ended it with an ellipsis.
   private fun isLikelyTruncated(extractedText: String): Boolean {
@@ -406,6 +464,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.ReadableArray
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import org.json.JSONArray
@@ -497,6 +556,34 @@ class NotificationModule(
       .edit()
       .putBoolean("app_active", isActive)
       .apply()
+  }
+
+  // Scanner switches as JSON, read by the listener and the killed-app worker.
+  @ReactMethod
+  fun setScannerSettings(json: String) {
+    reactContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      .edit()
+      .putString("scanner_settings", json)
+      .apply()
+  }
+
+  @ReactMethod
+  fun getInstalledApps(packages: ReadableArray, promise: Promise) {
+    val pm = reactContext.packageManager
+    val result = Arguments.createArray()
+    for (i in 0 until packages.size()) {
+      val name = packages.getString(i) ?: continue
+      try {
+        val info = pm.getApplicationInfo(name, 0)
+        result.pushMap(Arguments.createMap().apply {
+          putString("packageName", name)
+          putString("label", pm.getApplicationLabel(info).toString())
+        })
+      } catch (_: Exception) {
+        // Not installed (or not visible); leave it out.
+      }
+    }
+    promise.resolve(result)
   }
 
   @ReactMethod
@@ -752,6 +839,7 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
     private const val PREFS_NAME = "threatlens_prefs"
     private const val PREFS_NIM_KEY = "nim_api_key"
     private const val PREFS_APP_ACTIVE = "app_active"
+    private const val PREFS_SCANNER_SETTINGS = "scanner_settings"
     private const val PENDING_SCANS_FILE = "pending_scans.json"
     private const val NIM_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
     private const val DEBUG_TAG = "ThreatLensNotif"
@@ -890,6 +978,10 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     // A cut-off preview is only trusted when it already looks like a threat;
     // otherwise ask the user for the full text.
     if (isTruncated && result?.classification != "SCAM" && result?.classification != "PHISHING") {
+      if (!scannerSetting("pastePrompts")) {
+        Log.d(DEBUG_TAG, "[DEBUG-notif] worker paste prompt off pkg=\${pkg}")
+        return Result.success()
+      }
       val clipped = text.trim().take(120)
       postNotification(
         "Action Needed: Paste Full Message",
@@ -906,6 +998,10 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     val scanJson = buildScanJson(text, result)
     appendPendingScan(scanJson)
     Log.d(DEBUG_TAG, "[DEBUG-notif] worker persisted pkg=\${pkg}")
+    if (result.classification == "PROMO" && !scannerSetting("promoAlerts")) {
+      Log.d(DEBUG_TAG, "[DEBUG-notif] worker promo alert off pkg=\${pkg}")
+      return Result.success()
+    }
     val encoded = Base64.encodeToString(scanJson.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     val deepLink = "threatlens://scan/result?data=\${Uri.encode(encoded)}"
     val (t, b) = if (result.classification == "PROMO")
@@ -915,6 +1011,17 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     postNotification(t, b, deepLink)
     Log.d(DEBUG_TAG, "[DEBUG-notif] worker alert posted pkg=\${pkg} cls=\${result.classification}")
     return Result.success()
+  }
+
+  // Scanner switches saved by the app; missing or unreadable settings mean on.
+  private fun scannerSetting(key: String): Boolean {
+    val raw = applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+      .getString(PREFS_SCANNER_SETTINGS, null) ?: return true
+    return try {
+      JSONObject(raw).optBoolean(key, true)
+    } catch (_: Exception) {
+      true
+    }
   }
 
   private fun isAllowedPackage(pkg: String): Boolean {

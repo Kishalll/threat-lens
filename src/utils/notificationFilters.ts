@@ -1,7 +1,7 @@
 // Filters shared by the in-app listener and the background task, so both
 // paths skip the same noise before anything is sent for classification.
 
-const ALLOWED_MESSAGING_PACKAGES = new Set([
+export const ALLOWED_MESSAGING_PACKAGES = new Set([
   // WhatsApp
   "com.whatsapp",
   "com.whatsapp.w4b",

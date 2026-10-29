@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, mergeSettings } from "./settings";
+import { DEFAULT_SETTINGS, mergeSettings, retentionCutoff, retentionLabel } from "./settings";
 
 describe("settings", () => {
   it("returns the defaults when nothing was saved", () => {
@@ -37,5 +37,41 @@ describe("settings", () => {
 
     const fractional = mergeSettings({ scanner: { retention: { customValue: 2.5, customUnit: "weeks" } } });
     expect(fractional.scanner.retention.customValue).toBe(30);
+  });
+
+  describe("retentionCutoff", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = new Date(2026, 9, 29, 12, 0).getTime();
+
+    it("keeps everything when set to forever", () => {
+      expect(retentionCutoff({ mode: "forever", customValue: 30, customUnit: "days" }, now)).toBeNull();
+    });
+
+    it("uses fixed day counts for the presets and custom days or weeks", () => {
+      expect(retentionCutoff({ mode: "30d", customValue: 1, customUnit: "days" }, now)).toBe(now - 30 * DAY);
+      expect(retentionCutoff({ mode: "90d", customValue: 1, customUnit: "days" }, now)).toBe(now - 90 * DAY);
+      expect(retentionCutoff({ mode: "custom", customValue: 1, customUnit: "days" }, now)).toBe(now - DAY);
+      expect(retentionCutoff({ mode: "custom", customValue: 2, customUnit: "weeks" }, now)).toBe(now - 14 * DAY);
+    });
+
+    it("counts custom months on the calendar", () => {
+      expect(retentionCutoff({ mode: "custom", customValue: 3, customUnit: "months" }, now)).toBe(
+        new Date(2026, 6, 29, 12, 0).getTime()
+      );
+      const endOfMarch = new Date(2026, 2, 31, 12, 0).getTime();
+      expect(retentionCutoff({ mode: "custom", customValue: 1, customUnit: "months" }, endOfMarch)).toBe(
+        new Date(2026, 1, 28, 12, 0).getTime()
+      );
+      const midJanuary = new Date(2026, 0, 15, 12, 0).getTime();
+      expect(retentionCutoff({ mode: "custom", customValue: 12, customUnit: "months" }, midJanuary)).toBe(
+        new Date(2025, 0, 15, 12, 0).getTime()
+      );
+    });
+  });
+
+  it("describes the retention choice in words", () => {
+    expect(retentionLabel({ mode: "30d", customValue: 1, customUnit: "days" })).toBe("30 days");
+    expect(retentionLabel({ mode: "custom", customValue: 1, customUnit: "weeks" })).toBe("1 week");
+    expect(retentionLabel({ mode: "custom", customValue: 6, customUnit: "months" })).toBe("6 months");
   });
 });

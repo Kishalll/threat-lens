@@ -2,6 +2,7 @@ import { AppState, NativeModules, Platform } from "react-native";
 import { classifyMessage } from "../services/nimService";
 import { sendLocalNotification } from "../services/notificationService";
 import { useScannerStore } from "../stores/scannerStore";
+import { useSettingsStore } from "../stores/settingsStore";
 import { log } from "../utils/activityLog";
 import {
   isLikelyMessagingPackage,
@@ -52,12 +53,22 @@ export default async function notificationTask(taskData: TaskData): Promise<void
   }
 
   try {
+    // The app may have been started just for this task, before anything loaded settings.
+    if (!useSettingsStore.getState().hydrated) {
+      await useSettingsStore.getState().hydrate();
+    }
+    const { promoAlerts, pastePrompts } = useSettingsStore.getState().settings.scanner;
+
     log("intercepted", `${packageName} [headless] | "${text.slice(0, 60)}"`);
     const result = await classifyMessage(text);
 
     // A cut-off preview is only trusted when it already looks like a threat;
     // otherwise ask the user for the full text.
     if (isTruncated && !DANGEROUS.has(result.classification)) {
+      if (!pastePrompts) {
+        log("alert_skipped", `paste prompts off | ${packageName} [headless]`);
+        return;
+      }
       log("paste_prompt", `truncated notif from ${packageName} [headless]`);
       await sendLocalNotification(
         "Action Needed: Paste Full Message",
@@ -76,6 +87,10 @@ export default async function notificationTask(taskData: TaskData): Promise<void
     const encodedResult = btoa(unescape(encodeURIComponent(JSON.stringify(result))));
 
     if (result.classification === "PROMO") {
+      if (!promoAlerts) {
+        log("alert_skipped", `promo alerts off | ${packageName} [headless]`);
+        return;
+      }
       log("alert_sent", `PROMO from ${packageName} [headless]`);
       await sendLocalNotification(
         "Promotional Message Detected",

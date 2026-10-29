@@ -111,3 +111,39 @@ export function mergeSettings(stored: unknown): AppSettings {
     },
   };
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Oldest scan timestamp to keep, or null to keep everything. Custom months are
+// calendar months, so 31 March minus one month lands on the last day of February.
+export function retentionCutoff(retention: AppSettings["scanner"]["retention"], now: number): number | null {
+  switch (retention.mode) {
+    case "forever":
+      return null;
+    case "30d":
+      return now - 30 * DAY_MS;
+    case "90d":
+      return now - 90 * DAY_MS;
+    case "custom": {
+      if (retention.customUnit === "months") {
+        const date = new Date(now);
+        const day = date.getDate();
+        date.setDate(1);
+        date.setMonth(date.getMonth() - retention.customValue);
+        const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+        date.setDate(Math.min(day, lastDay));
+        return date.getTime();
+      }
+      const days = retention.customUnit === "weeks" ? retention.customValue * 7 : retention.customValue;
+      return now - days * DAY_MS;
+    }
+  }
+}
+
+export function retentionLabel(retention: AppSettings["scanner"]["retention"]): string {
+  if (retention.mode === "30d") return "30 days";
+  if (retention.mode === "90d") return "90 days";
+  if (retention.mode === "forever") return "forever";
+  const unit = retention.customValue === 1 ? retention.customUnit.slice(0, -1) : retention.customUnit;
+  return `${retention.customValue} ${unit}`;
+}

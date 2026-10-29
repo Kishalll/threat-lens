@@ -6,7 +6,7 @@ import { useScannerStore } from "../../src/stores/scannerStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
-import { SettingsNote } from "../../src/components/settings/SettingsControls";
+import ScannerSettings from "../../src/components/scanner/ScannerSettings";
 
 export default function ScannerScreen() {
   const router = useRouter();
@@ -117,7 +117,7 @@ export default function ScannerScreen() {
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Message Scanner</Text>
         <SettingsButton title="Scanner settings">
-          <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+          <ScannerSettings />
         </SettingsButton>
       </View>
       

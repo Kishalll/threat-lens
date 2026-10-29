@@ -14,6 +14,7 @@ const ICONS: Record<string, string> = {
   pending_scans_loaded: "📂",
   app_open: "🚀",
   dedup_skip: "♻️",
+  alert_skipped: "🔕",
 };
 
 function ts(): string {

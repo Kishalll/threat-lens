@@ -2,9 +2,16 @@ import { create } from "zustand";
 import type { ScanResult } from "../types";
 import { classifyMessage } from "../services/nimService";
 import { createScanRepository, dedupeScanResults } from "../services/scanRepository";
-import { getAllScanResults, insertScanResult } from "../services/storageService";
+import {
+  deleteAllScanResults,
+  deleteScanResultsBefore,
+  getAllScanResults,
+  insertScanResult,
+} from "../services/storageService";
 import { useDashboardStore } from "./dashboardStore";
+import { useSettingsStore } from "./settingsStore";
 import { log } from "../utils/activityLog";
+import { retentionCutoff } from "../utils/settings";
 
 const scanRepository = createScanRepository({
   insertScanResult,
@@ -13,6 +20,16 @@ const scanRepository = createScanRepository({
 
 function appendScanToHistory(history: ScanResult[], result: ScanResult): ScanResult[] {
   return dedupeScanResults([result, ...history]);
+}
+
+// Drops scans older than the "Keep history" setting from the database and returns what is left.
+async function deleteExpiredScans(history: ScanResult[]): Promise<ScanResult[]> {
+  const cutoff = retentionCutoff(useSettingsStore.getState().settings.scanner.retention, Date.now());
+  if (cutoff === null) {
+    return history;
+  }
+  await deleteScanResultsBefore(cutoff);
+  return history.filter((scan) => scan.timestamp >= cutoff);
 }
 
 function syncHistoryToDashboard(history: ScanResult[]): Promise<void> {
@@ -44,7 +61,8 @@ export interface ScannerState {
   scanManualText: (text: string) => Promise<ScanResult>;
   recordBackgroundScan: (result: ScanResult) => Promise<void>;
   cancelScan: () => void;
-  clearHistory: () => void;
+  applyRetention: () => Promise<void>;
+  clearHistory: () => Promise<void>;
 }
 
 export const useScannerStore = create<ScannerState>()((set, get) => ({
@@ -53,7 +71,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
   activeScanRequestId: 0,
 
   hydrateFromStorage: async () => {
-    const history = await scanRepository.loadHistory();
+    const history = await deleteExpiredScans(await scanRepository.loadHistory());
     set({ history });
     await syncHistoryToDashboard(history);
   },
@@ -75,6 +93,7 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
 
       set((state) => ({ history: appendScanToHistory(state.history, result), isScanning: false }));
       recordScanInDashboard(result);
+      await get().applyRetention();
 
       return result;
     } catch (error) {
@@ -104,7 +123,22 @@ export const useScannerStore = create<ScannerState>()((set, get) => ({
     await scanRepository.save(result);
     set((state) => ({ history: appendScanToHistory(state.history, result) }));
     recordScanInDashboard(result);
+    await get().applyRetention();
   },
 
-  clearHistory: () => set({ history: [] })
+  applyRetention: async () => {
+    const history = get().history;
+    const kept = await deleteExpiredScans(history);
+    if (kept.length === history.length) {
+      return;
+    }
+    set({ history: kept });
+    await syncHistoryToDashboard(kept);
+  },
+
+  clearHistory: async () => {
+    await deleteAllScanResults();
+    set({ history: [] });
+    await syncHistoryToDashboard([]);
+  },
 }));

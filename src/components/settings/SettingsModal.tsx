@@ -1,5 +1,5 @@
-import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { THEME } from "../../constants/theme";
 
@@ -10,14 +10,33 @@ interface SettingsModalProps {
   children: React.ReactNode;
 }
 
+// Android does not resize a modal for the keyboard, so track its height and
+// keep the card above it.
+function useKeyboardHeight(): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", (event) => setHeight(event.endCoordinates.height));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
+
 export default function SettingsModal({ visible, title, onClose, children }: SettingsModalProps) {
   const { height } = useWindowDimensions();
+  const keyboardHeight = useKeyboardHeight();
+  const available = height - keyboardHeight;
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close settings">
-        {/* Swallow touches on the card so only taps outside it close the modal. */}
-        <View style={[styles.card, { maxHeight: height * 0.75 }]} onStartShouldSetResponder={() => true}>
+      <View style={[styles.backdrop, { paddingBottom: 20 + keyboardHeight }]}>
+        {/* The tap-to-close layer sits behind the card, so the card never has to
+            claim touches and its scroll view always gets the drag. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close settings" />
+        <View style={[styles.card, { maxHeight: available * (keyboardHeight > 0 ? 0.85 : 0.75) }]}>
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
             <Pressable
@@ -34,7 +53,7 @@ export default function SettingsModal({ visible, title, onClose, children }: Set
             {children}
           </ScrollView>
         </View>
-      </Pressable>
+      </View>
     </Modal>
   );
 }
