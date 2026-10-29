@@ -10,7 +10,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { parseThreatLensUrl } from "../src/services/deepLinkService";
 import { initDatabase } from "../src/services/storageService";
-import { registerBackgroundFetchTasks } from "../src/services/backgroundTasks";
+import { syncBreachCheckTask } from "../src/services/backgroundTasks";
 import {
   getInitialSharedText,
   initializeNotificationInterceptor,
@@ -56,7 +56,6 @@ export default function RootLayout() {
     initializeNotificationInterceptor();
     void requestNotificationPermissions();
     void setupNotificationChannel();
-    void registerBackgroundFetchTasks();
 
     void (async () => {
       try {
@@ -70,6 +69,7 @@ export default function RootLayout() {
 
         await initDatabase();
         await useSettingsStore.getState().hydrate();
+        void syncBreachCheckTask(useSettingsStore.getState().settings.breach);
         const scannerStore = useScannerStore.getState();
         await scannerStore.hydrateFromStorage();
 

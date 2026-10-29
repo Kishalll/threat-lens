@@ -2,6 +2,8 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { useBreachStore } from "../stores/breachStore";
 import { useDashboardStore } from "../stores/dashboardStore";
+import { useSettingsStore } from "../stores/settingsStore";
+import type { AppSettings } from "../utils/settings";
 import { sendLocalNotification } from "./notificationService";
 import { executeBreachScan } from "./breachDomainService";
 import { replaceCachedBreaches } from "./storageService";
@@ -11,6 +13,14 @@ const BREACH_CHECK_TASK = "BACKGROUND_BREACH_CHECK";
 
 TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
   try {
+    // When Android runs this with the app closed, nothing has loaded the stores yet.
+    if (!useSettingsStore.getState().hydrated) {
+      await useSettingsStore.getState().hydrate();
+    }
+    if (!useBreachStore.getState().isHydrated) {
+      await useBreachStore.getState().hydrateFromStorage();
+    }
+
     const credentials = useBreachStore.getState().credentials;
     if (credentials.length === 0) {
       return BackgroundTask.BackgroundTaskResult.Success;
@@ -34,6 +44,9 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
 
     if (outcome.alertPayload) {
       log("breach_found", `${outcome.alertPayload.count} new breach(es) found`);
+      if (!useSettingsStore.getState().settings.breach.alerts) {
+        return BackgroundTask.BackgroundTaskResult.Success;
+      }
 
       await sendLocalNotification(
         "New Data Breach Detected",
@@ -55,13 +68,31 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
   }
 });
 
-export async function registerBackgroundFetchTasks() {
+// Registering restarts Android's timer for the task, so only touch it when the
+// saved setting differs from what is already registered.
+export async function syncBreachCheckTask(settings: AppSettings["breach"]): Promise<void> {
   try {
-    await BackgroundTask.registerTaskAsync(BREACH_CHECK_TASK, {
-      minimumInterval: 60, // 1 hour (in minutes)
-    });
-    console.log("Registered breach check background task");
+    const tasks = await TaskManager.getRegisteredTasksAsync();
+    const current = tasks.find((task) => task.taskName === BREACH_CHECK_TASK);
+    const minimumInterval = settings.intervalHours * 60;
+
+    if (!settings.backgroundChecks) {
+      if (current) {
+        await BackgroundTask.unregisterTaskAsync(BREACH_CHECK_TASK);
+      }
+      log("breach_check", "background check off");
+      return;
+    }
+
+    const currentInterval = (current?.options as { minimumInterval?: number } | undefined)?.minimumInterval;
+    if (currentInterval !== minimumInterval) {
+      if (current) {
+        await BackgroundTask.unregisterTaskAsync(BREACH_CHECK_TASK);
+      }
+      await BackgroundTask.registerTaskAsync(BREACH_CHECK_TASK, { minimumInterval });
+    }
+    log("breach_check", `background check every ${settings.intervalHours}h`);
   } catch (err) {
-    console.error("Task Register failed:", err);
+    console.error("Breach check task sync failed:", err);
   }
 }

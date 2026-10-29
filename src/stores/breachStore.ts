@@ -15,6 +15,7 @@ import {
   type StoredCredential,
 } from "../services/storageService";
 import { sendLocalNotification } from "../services/notificationService";
+import { useSettingsStore } from "./settingsStore";
 import { generateBreachGuidance } from "../services/nimService";
 import { useDashboardStore } from "./dashboardStore";
 
@@ -361,7 +362,7 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
         .getState()
         .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
-      if (notifyOnNew && outcome.alertPayload) {
+      if (notifyOnNew && outcome.alertPayload && useSettingsStore.getState().settings.breach.alerts) {
         await sendLocalNotification(
           "New Data Breach Detected",
           `New breach data found for ${outcome.alertPayload.credentialSummary}. Tap to review in Breach tab.`,

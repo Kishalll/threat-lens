@@ -6,7 +6,7 @@ import { useBreachStore } from "../../src/stores/breachStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
-import { SettingsNote } from "../../src/components/settings/SettingsControls";
+import BreachSettings from "../../src/components/breach/BreachSettings";
 
 function parseStoredGuidance(value?: string): { actionItems: string[]; isFallback: boolean } | null {
   if (!value) {
@@ -225,7 +225,7 @@ export default function BreachScreen() {
       <View style={styles.headerRow}>
         <Text style={styles.headerTitle}>Data Breaches</Text>
         <SettingsButton title="Breach settings">
-          <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+          <BreachSettings />
         </SettingsButton>
       </View>
       
