@@ -94,7 +94,7 @@ function toStringArray(value: unknown): string[] {
 function mapXposedBreachDetails(details: any[]): BreachApiItem[] {
   return details.map((detail) => ({
     id: detail?.breach || detail?.domain || Math.random().toString(),
-    name: detail?.breach || "Unknown Breach",
+    name: detail?.breach || "Unnamed breach",
     domain: detail?.domain || "Unknown Domain",
     date: normalizeDate(detail?.xposed_date),
     description:
@@ -142,7 +142,7 @@ function mapXposedCheckEmailResponse(data: any): BreachApiItem[] {
     name,
     domain: "Unknown Domain",
     date: normalizeDate(undefined),
-    description: "This email appears in XposedOrNot breach records.",
+    description: "This email shows up in a known breach.",
     dataClasses: ["Email"],
     source: "XposedOrNot",
   }));
@@ -155,14 +155,14 @@ function mapLeakCheckResponse(data: any, inputType: "email" | "username"): Breac
   return sources.map((source: any, index: number) => {
     const sourceName = typeof source?.name === "string" && source.name.trim().length > 0
       ? source.name.trim()
-      : "Unknown Leak Source";
+      : "Unnamed leak";
 
     return {
       id: `${sourceName}:${source?.date ?? index}`,
       name: sourceName,
       domain: sourceName,
       date: normalizeDate(source?.date),
-      description: `This ${inputType} was found in LeakCheck source ${sourceName}.`,
+      description: `This ${inputType} showed up in a leak from ${sourceName}.`,
       dataClasses: fields.length > 0 ? fields : ["Unknown"],
       source: "LeakCheck",
     };
@@ -228,7 +228,7 @@ export async function checkEmailWithXposedOrNot(email: string): Promise<BreachAp
     }
 
     console.error("XposedOrNot API Error", error);
-    throw new Error("Unable to fetch breach data from XposedOrNot.");
+    throw new Error("Couldn't reach XposedOrNot.");
   }
 }
 
@@ -274,7 +274,7 @@ export async function checkWithLeakCheck(identifier: string, inputType: "email" 
     }
 
     console.error("LeakCheck API Error", error);
-    throw new Error("Unable to fetch breach data from LeakCheck.");
+    throw new Error("Couldn't reach LeakCheck.");
   }
 }
 

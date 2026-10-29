@@ -11,7 +11,7 @@ export default function OnboardingScreen() {
   const [email, setEmail] = useState("");
 
   const nextStep = () => {
-    if (step < 4) {
+    if (step < 3) {
       setStep(step + 1);
     } else {
       // Finish onboarding
@@ -56,18 +56,9 @@ export default function OnboardingScreen() {
           <View>
             <Text style={styles.title}>How it Works</Text>
             <Text style={styles.body}>
-              • Breaches: We alert you if your data is leaked.{'\n'}
-              • Scanner: AI classifies messages to detect scams.{'\n'}
-              • Shield: We embed invisible watermarks to protect your photos.
-            </Text>
-          </View>
-        );
-      case 4:
-        return (
-          <View>
-            <Text style={styles.title}>Optional Sync</Text>
-            <Text style={styles.body}>
-              ThreatLens is local-first by default. You can enable Firebase sync later if you want to access your data across devices.
+              • Breaches: we tell you if your email or username shows up in a leak.{'\n'}
+              • Scanner: checks your messages for scams.{'\n'}
+              • Shield: marks your photos so edits show up.
             </Text>
           </View>
         );
@@ -83,7 +74,7 @@ export default function OnboardingScreen() {
       </View>
       <View style={styles.footer}>
         <View style={styles.pagination}>
-          {[1, 2, 3, 4].map((i) => (
+          {[1, 2, 3].map((i) => (
             <View
               key={i}
               style={[styles.dot, step === i && styles.activeDot]}
@@ -92,7 +83,7 @@ export default function OnboardingScreen() {
         </View>
         <Pressable style={styles.button} onPress={nextStep}>
           <Text style={styles.buttonText}>
-            {step === 4 ? "Get Started" : "Next"}
+            {step === 3 ? "Get Started" : "Next"}
           </Text>
         </Pressable>
       </View>

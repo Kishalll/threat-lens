@@ -83,7 +83,7 @@ export default function ScannerScreen() {
         setScanError(
           result.explanation.trim().length > 0
             ? result.explanation
-            : "AI quota exceeded or temporarily unavailable. Please try again."
+            : "The AI is busy right now. Try again in a minute."
         );
         return;
       }
@@ -106,7 +106,7 @@ export default function ScannerScreen() {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Message analysis failed. Please try again.";
+          : "Couldn't check this message. Try again.";
       setScanError(message);
       setLastFailedInput(input);
     }
@@ -148,7 +148,7 @@ export default function ScannerScreen() {
           style={styles.textInput}
           multiline
           numberOfLines={6}
-          placeholder="Paste or type a message, email, or link here to analyze it for scams or phishing..."
+          placeholder="Paste a message, email or link"
           placeholderTextColor={colors.muted}
           value={textToScan}
           onChangeText={setTextToScan}
@@ -168,14 +168,14 @@ export default function ScannerScreen() {
           {scannerStore.isScanning ? (
             <ActivityIndicator color={colors.onAccent} />
           ) : (
-            <Text style={styles.scanButtonText}>Analyze Message</Text>
+            <Text style={styles.scanButtonText}>Check message</Text>
           )}
         </Pressable>
 
         {scannerStore.isScanning ? (
           <Pressable style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]} onPress={scannerStore.cancelScan}>
             <Feather name="x-circle" size={18} color={colors.danger} />
-            <Text style={styles.cancelButtonText}>Cancel Scan</Text>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
           </Pressable>
         ) : null}
 
@@ -193,7 +193,7 @@ export default function ScannerScreen() {
         ) : null}
       </View>
 
-      <Text style={styles.sectionTitle}>Scan History</Text>
+      <Text style={styles.sectionTitle}>History</Text>
       
       {scannerStore.history.length > 0 ? (
         <HistoryFilters value={historyFilter} counts={filterCounts} onChange={setHistoryFilter} />

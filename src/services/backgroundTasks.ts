@@ -8,6 +8,7 @@ import { sendLocalNotification } from "./notificationService";
 import { executeBreachScan } from "./breachDomainService";
 import { replaceCachedBreaches } from "./storageService";
 import { log } from "../utils/activityLog";
+import { breachAlertText } from "../utils/alertText";
 
 const BREACH_CHECK_TASK = "BACKGROUND_BREACH_CHECK";
 
@@ -48,9 +49,10 @@ TaskManager.defineTask(BREACH_CHECK_TASK, async () => {
         return BackgroundTask.BackgroundTaskResult.Success;
       }
 
+      const alert = breachAlertText(outcome.alertPayload.count, outcome.alertPayload.credentialSummary);
       await sendLocalNotification(
-        "New Data Breach Detected",
-        `${outcome.alertPayload.count} new breach(es) found for ${outcome.alertPayload.credentialSummary}. Tap to review.`,
+        alert.title,
+        alert.body,
         {
           type: "BREACH_ALERT",
           breachIds: outcome.alertPayload.breachIds,

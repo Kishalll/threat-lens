@@ -4,6 +4,7 @@ import { classifyMessage } from "../services/nimService";
 import { useScannerStore } from "../stores/scannerStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { log } from "../utils/activityLog";
+import { pastePromptText, promoAlertText, scanUnavailableText, threatAlertText } from "../utils/alertText";
 import {
   isLikelyMessagingPackage,
   isLikelySystemOrServiceNotification,
@@ -34,6 +35,7 @@ let classificationPausedUntil = 0;
 
 type NativeNotificationEvent = {
   packageName?: string;
+  appName?: string;
   title?: string;
   text?: string;
   isTruncated?: boolean;
@@ -163,15 +165,16 @@ function buildCapturedPreview(text: string): { summary: string; capturedText: st
   };
 }
 
-async function promptForFullMessage(packageName: string, title: string, text: string) {
+async function promptForFullMessage(packageName: string, sender: string, text: string) {
   const preview = buildCapturedPreview(text);
+  const alert = pastePromptText(sender);
   await sendLocalNotification(
-    "Action Needed: Paste Full Message",
-    `ThreatLens could not read the full notification from ${title || packageName}. ${preview.summary} Tap to paste the complete text in Scanner.`,
+    alert.title,
+    alert.body,
     {
       type: "PASTE_FULL_NOTIFICATION_PROMPT",
       sourcePackage: packageName,
-      sourceTitle: title,
+      sourceTitle: sender,
       capturedPreview: preview.summary,
       capturedText: preview.capturedText,
       threatlensInternal: true,
@@ -230,6 +233,7 @@ export function initializeNotificationInterceptor() {
     if (AppState.currentState !== 'active') return;
 
     const packageName = typeof event.packageName === "string" ? event.packageName : "unknown-app";
+    const appName = typeof event.appName === "string" && event.appName ? event.appName : packageName;
     const title = typeof event.title === "string" ? event.title : "";
     const text = typeof event.text === "string" ? event.text : "";
     const isTruncated = event.isTruncated === true;
@@ -297,7 +301,7 @@ export function initializeNotificationInterceptor() {
           return;
         }
         log("paste_prompt", `truncated notif from ${packageName}`);
-        await promptForFullMessage(packageName, title, text);
+        await promptForFullMessage(packageName, title || appName, text);
         return;
       }
 
@@ -313,9 +317,10 @@ export function initializeNotificationInterceptor() {
           return;
         }
         log("alert_sent", `PROMO from ${packageName}`);
+        const alert = promoAlertText(appName);
         await sendLocalNotification(
-          "Promotional Message Detected",
-          `A promotional message was received from ${packageName}.`,
+          alert.title,
+          alert.body,
           {
             type: "PROMO_ALERT",
             classification: scanResult.classification,
@@ -332,9 +337,10 @@ export function initializeNotificationInterceptor() {
       }
 
       log("alert_sent", `${scanResult.classification} from ${packageName}`);
+      const alert = threatAlertText(scanResult.classification, appName);
       await sendLocalNotification(
-        `Threat Alert: ${scanResult.classification}`,
-        `Potential ${scanResult.classification.toLowerCase()} content detected from ${packageName}. Tap for full analysis.`,
+        alert.title,
+        alert.body,
         {
           type: "THREAT_ALERT",
           classification: scanResult.classification,
@@ -347,7 +353,7 @@ export function initializeNotificationInterceptor() {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Automatic scan is temporarily unavailable.";
+          : "Auto scan isn't working right now.";
 
       if (isScanCancelledError(message)) {
         return;
@@ -370,9 +376,10 @@ export function initializeNotificationInterceptor() {
         return;
       }
 
+      const alert = scanUnavailableText(message);
       await sendLocalNotification(
-        "Threat Scan Unavailable",
-        `${message} Tap to retry from Scanner.`,
+        alert.title,
+        alert.body,
         {
           type: "SCAN_RETRY_PROMPT",
           sourcePackage: packageName,

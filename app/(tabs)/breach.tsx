@@ -236,7 +236,7 @@ export default function BreachScreen() {
       <View style={styles.addSection}>
         <TextInput
           style={[styles.input, inputError ? styles.inputErrorBorder : null]}
-          placeholder="Add email or username to monitor"
+          placeholder="Email or username to watch"
           placeholderTextColor={colors.muted}
           value={newEmail}
           onChangeText={handleCredentialInputChange}
@@ -250,11 +250,11 @@ export default function BreachScreen() {
 
       <ScrollView style={styles.listContainer} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Active Monitored Accounts</Text>
+          <Text style={styles.sectionTitle}>Watching</Text>
         </View>
         
         {breachStore.credentials.length === 0 ? (
-          <Text style={styles.emptyText}>No accounts monitored.</Text>
+          <Text style={styles.emptyText}>Not watching any accounts yet.</Text>
         ) : (
           breachStore.credentials.map((cred) => (
             <View key={cred.id} style={styles.credentialRow}>
@@ -267,7 +267,7 @@ export default function BreachScreen() {
         )}
 
         <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-          <Text style={styles.sectionTitle}>Detected Breaches</Text>
+          <Text style={styles.sectionTitle}>Breaches</Text>
           <Pressable onPress={() => breachStore.runScan()} disabled={breachStore.isScanning}>
              {breachStore.isScanning ? (
                  <ActivityIndicator size="small" color={colors.accent} />
@@ -324,7 +324,7 @@ export default function BreachScreen() {
           ) : (
             <Text style={styles.safeText}>
               {selectedCredentialFilter === ALL_FILTER
-                ? "No breaches detected! You are secure."
+                ? "No breaches found."
                 : `No breaches found for ${selectedCredentialFilter}.`}
             </Text>
           )
@@ -382,9 +382,9 @@ export default function BreachScreen() {
                   ? `${breachProgressById[breach.id]?.actedSuggestions ?? 0} of ${
                       breachProgressById[breach.id]?.totalSuggestions ?? 0
                     } actions completed`
-                  : "AI action plan pending"}
+                  : "Plan not ready yet"}
               </Text>
-              <Text style={styles.tapToView}>Tap to view guidance ›</Text>
+              <Text style={styles.tapToView}>See what to do ›</Text>
             </Pressable>
           ))
         )}

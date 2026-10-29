@@ -74,7 +74,7 @@ export default function ProtectPanel({
         ) : (
           <View style={[styles.imageBox, styles.placeholderBox]}>
             <Feather name="image" size={44} color={colors.textTertiary} />
-            <Text style={styles.placeholderText}>Select a photo to sign</Text>
+            <Text style={styles.placeholderText}>Pick a photo to protect</Text>
           </View>
         )}
         {(protectSourceUri || signedImageUri) && !isBusy && (
@@ -130,7 +130,7 @@ export default function ProtectPanel({
 
       {protectStep === "done" && protectPayload ? (
         <View style={styles.resultCard}>
-          <Text style={styles.resultTitle}>Signed Payload</Text>
+          <Text style={styles.resultTitle}>Signature details</Text>
           <Text style={styles.resultLine}>Install: {protectPayload.installID}</Text>
           <Text style={styles.resultLine}>
             Signed at: {new Date(protectPayload.timestamp).toLocaleString()}
@@ -140,7 +140,7 @@ export default function ProtectPanel({
             onPress={onSave}
           >
             <Feather name="download" size={16} color={colors.accent} />
-            <Text style={styles.outlineButtonText}>Save Signed Image</Text>
+            <Text style={styles.outlineButtonText}>Save photo</Text>
           </Pressable>
         </View>
       ) : null}

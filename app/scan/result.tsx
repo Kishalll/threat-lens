@@ -125,12 +125,12 @@ export default function ScanResultScreen() {
         <Text style={styles.confidenceText}>Confidence: {record.confidence}%</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>AI Analysis</Text>
+      <Text style={styles.sectionTitle}>Why</Text>
       <Text style={styles.explanationText}>{record.explanation}</Text>
 
       {record.redFlags && record.redFlags.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>Red Flags Detected</Text>
+          <Text style={styles.sectionTitle}>Red flags</Text>
           <View style={styles.listContainer}>
             {record.redFlags.map((flag, i) => (
               <View key={i} style={styles.listItem}>
@@ -144,7 +144,7 @@ export default function ScanResultScreen() {
 
       {trackedSuggestions.length > 0 && (
         <>
-          <Text style={styles.sectionTitle}>Suggested Actions</Text>
+          <Text style={styles.sectionTitle}>What to do</Text>
           <View style={styles.listContainer}>
             {trackedSuggestions.map((suggestion) => (
               <View key={suggestion.id} style={styles.listItem}>
@@ -179,7 +179,7 @@ export default function ScanResultScreen() {
         </>
       )}
 
-      <Text style={styles.sectionTitle}>Original Message Preview</Text>
+      <Text style={styles.sectionTitle}>Message</Text>
       <View style={styles.previewCard}>
         <Text style={styles.previewText}>{record.messagePreview}...</Text>
       </View>

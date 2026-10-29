@@ -65,6 +65,13 @@ RULES:
 - For SCAM/PHISHING: suggested_actions must be specific and actionable (e.g. "Block this number", "Report to your bank", "Do not click the link", "File complaint at cybercrime.gov.in"). Avoid generic advice.
 - confidence should reflect how certain you are (0-100). Use 80+ for clear-cut cases, 50-79 for ambiguous ones.
 
+WRITING STYLE (explanation, red_flags, suggested_actions):
+- Write for someone who isn't technical. Short sentences, everyday words.
+- explanation: 1-2 short sentences. Say what the message wants from the user and why that is a problem.
+- red_flags: a few words each, e.g. "Asks for your OTP", "Link is not the bank's website".
+- suggested_actions: short commands, e.g. "Block this number", "Don't click the link".
+- No jargon ("malicious", "indicators", "threat actor", "social engineering"), no dashes, no exclamation marks.
+
 EXAMPLES:
 - "482913 is your OTP for Rs 2,499 at Amazon on HDFC Bank card XX1234. Never share your OTP with anyone." -> SAFE
 - "Rs 500.00 debited from A/c XX4521 to VPA abc@okicici. UPI Ref 61234. Not you? Call 18001234567" -> SAFE
@@ -77,7 +84,7 @@ Respond ONLY with valid JSON. Schema:
 {
   "classification": "SAFE|PROMO|SCAM|PHISHING",
   "confidence": 0-100,
-  "explanation": "1-3 sentences, plain English",
+  "explanation": "1-2 short sentences in plain words",
   "red_flags": ["specific suspicious element"],
   "suggested_actions": ["specific actionable step"]
 }`;
@@ -99,15 +106,15 @@ const SCANNER_JSON_SCHEMA = {
 };
 
 const BREACH_SYSTEM_PROMPT = `You are a cybersecurity assistant helping users recover from data breaches.
-Respond ONLY with valid JSON — no markdown, no text outside the JSON object.
+Respond ONLY with valid JSON, no markdown and no text outside the JSON object.
 
 Schema:
 {
-  "summary": "1-2 short plain English sentences about the breach impact",
-  "action_items": ["short actionable step", "short actionable step", "short actionable step"]
+  "summary": "1-2 short sentences on what leaked and what it means for the user",
+  "action_items": ["short step", "short step", "short step"]
 }
 
-Rules: keep summary separate from action items. Use plain English. Prefer concrete steps the user can do right now.`;
+Rules: keep the summary separate from the action items. Write for someone who isn't technical: short sentences, everyday words, no jargon, no dashes. Action items are short commands the user can do right now, e.g. "Change your Canva password".`;
 
 // ---------------------------------------------------------------------------
 // NIM client
@@ -116,7 +123,7 @@ Rules: keep summary separate from action items. Use plain English. Prefer concre
 async function getNIMClient(overrideKey?: string): Promise<OpenAI> {
   const apiKey = overrideKey ?? (await getActiveNimKey()).key;
   if (!apiKey) {
-    throw new Error("No NVIDIA API key. Add one in Home settings.");
+    throw new Error("No NVIDIA key set. Add one in Settings on the Home tab.");
   }
   return new OpenAI({
     baseURL: "https://integrate.api.nvidia.com/v1",
@@ -347,32 +354,32 @@ function fallbackScanResult(text: string, explanation: string): ScanResult {
     confidence: 0,
     messagePreview: text.slice(0, 100),
     redFlags: [],
-    suggestedActions: ["Retry in a few minutes once AI capacity is available."],
+    suggestedActions: ["Try again in a few minutes."],
     explanation,
   };
 }
 
 function getClassifyFallbackExplanation(error: unknown): string {
   if (isCompromisedOrInvalidKeyError(error)) {
-    return "NVIDIA API key was rejected. Check it in Home settings.";
+    return "NVIDIA rejected your key. Check it in Settings on the Home tab.";
   }
   if (isQuotaOrRateLimitError(error)) {
-    return "AI quota exceeded right now. Please retry shortly.";
+    return "The AI is busy right now. Try again in a minute.";
   }
-  return "Unable to analyse message at this time.";
+  return "Couldn't check this message right now.";
 }
 
 function getBreachFallbackGuidance(error: unknown): BreachGuidance {
   if (isCompromisedOrInvalidKeyError(error)) {
     return {
-      summary: "AI guidance unavailable — NIM API key is invalid.",
-      actionItems: ["Add a valid API key and restart", "Change passwords for affected accounts", "Enable 2FA"],
+      summary: "Couldn't make a plan. NVIDIA rejected your key.",
+      actionItems: ["Check your NVIDIA key in Settings", "Change the password for this account", "Turn on two-step login"],
       isFallback: true,
     };
   }
   return {
-    summary: "Review the affected account, change credentials, and monitor for suspicious activity.",
-    actionItems: ["Change passwords for affected accounts", "Enable 2FA", "Watch for phishing attempts"],
+    summary: "Change the password for this account and watch for anything odd.",
+    actionItems: ["Change the password for this account", "Turn on two-step login", "Watch for fake emails and messages"],
     isFallback: true,
   };
 }
@@ -384,8 +391,8 @@ function fallbackGuidanceFromText(text: string, isFallback: boolean): BreachGuid
     .filter((l) => l.length > 0);
   const [summaryLine, ...actionLines] = lines;
   return {
-    summary: summaryLine ?? "Review the affected account, change credentials, and monitor for suspicious activity.",
-    actionItems: actionLines.length > 0 ? actionLines : ["Change passwords", "Enable 2FA", "Watch for phishing"],
+    summary: summaryLine ?? "Change the password for this account and watch for anything odd.",
+    actionItems: actionLines.length > 0 ? actionLines : ["Change the password for this account", "Turn on two-step login", "Watch for fake emails and messages"],
     isFallback,
   };
 }
@@ -442,7 +449,7 @@ export async function classifyMessage(text: string): Promise<ScanResult> {
       suggestedActions: Array.isArray(suggestedActions)
         ? (suggestedActions as unknown[]).filter((v): v is string => typeof v === "string")
         : [],
-      explanation: typeof parsed.explanation === "string" ? parsed.explanation : "No explanation provided.",
+      explanation: typeof parsed.explanation === "string" ? parsed.explanation : "No reason given.",
     };
 
     return applyClassificationGuardrails(text, aiResult);

@@ -61,8 +61,7 @@ export default function HomeScreen() {
     return diff < 1 ? "Just now" : `${diff} min ago`;
   };
 
-  const formatPendingTagText = (count: number) =>
-    `${count} ${count === 1 ? "Action" : "Actions"} Pending`;
+  const formatPendingTagText = (count: number) => `${count} to do`;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -85,7 +84,7 @@ export default function HomeScreen() {
           title="Data Breaches"
           value={
             effectiveActiveBreachesCount === 0
-              ? "All Clear"
+              ? "All good"
               : `${effectiveActiveBreachesCount} Found`
           }
           icon="shield-off"
@@ -93,7 +92,7 @@ export default function HomeScreen() {
             effectiveActiveBreachesCount === 0 ? colors.statusGood : colors.statusBad
           }
           badgeCount={effectiveActiveBreachesCount}
-          timestampText={`Last checked: ${timeAgo(lastUpdateTimestamp)}`}
+          timestampText={`Checked ${timeAgo(lastUpdateTimestamp).toLowerCase()}`}
           pendingTagText={
             pendingBreachActionsCount > 0
               ? formatPendingTagText(pendingBreachActionsCount)

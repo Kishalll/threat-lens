@@ -96,12 +96,12 @@ export default function BreachDetailScreen() {
     totalSuggestionsCount === 0 ? (hasGuidance ? 1 : 0) : actedSuggestionsCount / totalSuggestionsCount;
   const progressText =
     !hasGuidance
-      ? "AI action plan pending"
+      ? "Plan not ready yet"
       : totalSuggestionsCount === 0
       ? hasGuidance
-        ? "No action items required"
-        : "0 of 0 actions completed"
-      : `${actedSuggestionsCount} of ${totalSuggestionsCount} actions completed`;
+        ? "Nothing to do"
+        : "0 of 0 done"
+      : `${actedSuggestionsCount} of ${totalSuggestionsCount} done`;
 
   useEffect(() => {
     if (!breachId) {
@@ -144,7 +144,7 @@ export default function BreachDetailScreen() {
         const message =
           error instanceof Error && error.message.trim().length > 0
             ? error.message
-            : "AI guidance failed to generate right now.";
+            : "Couldn't make a plan right now. Open this breach again to retry.";
         setGuidanceError(message);
       })
       .finally(() => {
@@ -229,7 +229,7 @@ export default function BreachDetailScreen() {
         <Text style={styles.progressText}>{progressText}</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>What was leaked?</Text>
+      <Text style={styles.sectionTitle}>What leaked</Text>
       <View style={styles.tagsContainer}>
         {breach.dataClasses.map((item, index) => (
           <View key={index} style={styles.dataClassTag}>
@@ -241,12 +241,12 @@ export default function BreachDetailScreen() {
       <Text style={styles.sectionTitle}>Description</Text>
       <Text style={styles.body}>{breach.description}</Text>
 
-      <Text style={styles.sectionTitle}>Action Plan (AI Guided)</Text>
+      <Text style={styles.sectionTitle}>What to do</Text>
       <View style={styles.guidanceCard}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.statusGood} />
-            <Text style={styles.loadingText}>Generating AI recovery plan...</Text>
+            <Text style={styles.loadingText}>Working out what to do...</Text>
           </View>
         ) : guidanceError ? (
           <Text style={styles.errorText}>{guidanceError}</Text>
@@ -258,7 +258,7 @@ export default function BreachDetailScreen() {
             </View>
 
             <View style={styles.actionCard}>
-              <Text style={styles.subsectionTitle}>Action Items</Text>
+              <Text style={styles.subsectionTitle}>Steps</Text>
               {breachSuggestions.length > 0 ? (
                 breachSuggestions.map((suggestion) => (
                   <View key={suggestion.id} style={styles.suggestionRow}>
@@ -285,12 +285,12 @@ export default function BreachDetailScreen() {
                   </View>
                 ))
               ) : (
-                <Text style={styles.guidanceText}>No follow-up actions were generated.</Text>
+                <Text style={styles.guidanceText}>Nothing else to do.</Text>
               )}
             </View>
           </View>
         ) : (
-          <Text style={styles.guidanceText}>No guidance available yet.</Text>
+          <Text style={styles.guidanceText}>No plan yet.</Text>
         )}
       </View>
 

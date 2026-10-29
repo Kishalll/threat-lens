@@ -69,7 +69,7 @@ export default function VerifyPanel({
         ) : (
           <View style={[styles.imageBox, styles.placeholderBox]}>
             <Feather name="search" size={44} color={colors.textTertiary} />
-            <Text style={styles.placeholderText}>Select an image to verify</Text>
+            <Text style={styles.placeholderText}>Pick an image to check</Text>
           </View>
         )}
         {verifySourceUri && !verifyLoading && (

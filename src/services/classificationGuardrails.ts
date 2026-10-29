@@ -112,22 +112,22 @@ export function applyClassificationGuardrails(text: string, result: ScanResult):
 
   // 1. Short casual messages with no threats are always safe
   if (isLikelyCasualSafeMessage(normalized) && threats === 0 && result.classification !== "SAFE") {
-    return toSafe(result, Math.max(75, result.confidence), "Likely normal conversation with no clear scam indicators.");
+    return toSafe(result, Math.max(75, result.confidence), "Looks like a normal chat.");
   }
 
   // 2. Bank/UPI transaction alerts and OTPs the model over-flagged
   if (flagged && isLikelyTransactionalAlert(cleaned)) {
-    return toSafe(result, Math.max(80, result.confidence), "Transaction alert from a financial institution or service.");
+    return toSafe(result, Math.max(80, result.confidence), "Looks like a normal bank or payment alert.");
   }
 
   // 2b. Delivery and shipment updates the model over-flagged
   if (flagged && isLikelyDeliveryNotification(cleaned)) {
-    return toSafe(result, Math.max(80, result.confidence), "Delivery or shipment notification from a logistics/e-commerce service.");
+    return toSafe(result, Math.max(80, result.confidence), "Looks like a normal delivery update.");
   }
 
   // 3. No threat signals at all: only trust a confident SCAM/PHISHING verdict
   if (flagged && threats === 0 && result.confidence < UNBACKED_VERDICT_MIN_CONFIDENCE) {
-    return toSafe(result, 60, "No clear scam or phishing signals found.");
+    return toSafe(result, 60, "Nothing suspicious found.");
   }
 
   // 4. SAFE and PROMO results should never carry red flags or actions

@@ -201,6 +201,7 @@ class NotificationService : NotificationListenerService() {
     const val ACTION_NOTIFICATION_CAPTURED = "${packageName}.NOTIFICATION_CAPTURED"
     const val EXTRA_PACKAGE_NAME = "packageName"
     const val EXTRA_TITLE = "title"
+    const val EXTRA_APP_NAME = "appName"
     const val EXTRA_TEXT = "text"
     const val EXTRA_IS_TRUNCATED = "isTruncated"
     const val EXTRA_POSTED_AT = "postedAt"
@@ -272,10 +273,14 @@ class NotificationService : NotificationListenerService() {
       recentFingerprints[fingerprint] = now
     }
 
+    // Alerts name the app ("WhatsApp"), not the package.
+    val appName = appLabel(sbn.packageName)
+
     // Path 1: broadcast to dynamic receiver (works when app is alive)
     val intent = Intent(ACTION_NOTIFICATION_CAPTURED).apply {
       \`package\` = packageName
       putExtra(EXTRA_PACKAGE_NAME, sbn.packageName)
+      putExtra(EXTRA_APP_NAME, appName)
       putExtra(EXTRA_TITLE, title)
       putExtra(EXTRA_TEXT, messageText)
       putExtra(EXTRA_IS_TRUNCATED, isTruncated)
@@ -290,6 +295,7 @@ class NotificationService : NotificationListenerService() {
     try {
       val inputData = Data.Builder()
         .putString(EXTRA_PACKAGE_NAME, sbn.packageName)
+        .putString(EXTRA_APP_NAME, appName)
         .putString(EXTRA_TITLE, title)
         .putString(EXTRA_TEXT, messageText)
         .putBoolean(EXTRA_IS_TRUNCATED, isTruncated)
@@ -346,6 +352,12 @@ class NotificationService : NotificationListenerService() {
       .filter { it.isNotEmpty() }
       .maxByOrNull { it.length }
       .orEmpty()
+  }
+
+  private fun appLabel(pkg: String): String = try {
+    packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+  } catch (_: Exception) {
+    pkg
   }
 
   private fun extractBestTitle(extras: Bundle): String {
@@ -496,6 +508,10 @@ class NotificationModule(
         putString(
           NotificationService.EXTRA_PACKAGE_NAME,
           intent.getStringExtra(NotificationService.EXTRA_PACKAGE_NAME).orEmpty()
+        )
+        putString(
+          NotificationService.EXTRA_APP_NAME,
+          intent.getStringExtra(NotificationService.EXTRA_APP_NAME).orEmpty()
         )
         putString(
           NotificationService.EXTRA_TITLE,
@@ -660,7 +676,7 @@ class NotificationModule(
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = reactContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-    val channel = NotificationChannel(CHANNEL_ID, "Threat Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+    val channel = NotificationChannel(CHANNEL_ID, "Scam alerts", NotificationManager.IMPORTANCE_HIGH).apply {
       enableVibration(true)
       vibrationPattern = longArrayOf(0, 250, 250, 250)
       lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
@@ -909,13 +925,15 @@ SCAM: impersonation with threats (police, electricity, courier), personal mobile
 PROMO: marketing, offers, sales, recharge plans, even from unknown senders.
 SAFE: everything else, incl. bank/UPI transaction alerts, OTPs sent to the user (a "do not share" warning means genuine), deliveries, bills, personal chat.
 RULES: An unknown or short-code sender is not a threat by itself. Financial keywords alone do NOT make a message suspicious. SAFE/PROMO: red_flags and suggested_actions=[]. confidence 0-100.
-Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","confidence":0-100,"explanation":"1-3 sentences","red_flags":[],"suggested_actions":[]}
+STYLE: write for someone who isn't technical. explanation is 1-2 short sentences in everyday words. red_flags are a few words each ("Asks for your OTP"). suggested_actions are short commands ("Block this number"). No jargon, no dashes.
+Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","confidence":0-100,"explanation":"1-2 short sentences","red_flags":[],"suggested_actions":[]}
     """.trimIndent()
   }
 
   override fun doWork(): Result {
     val pkg = inputData.getString(NotificationService.EXTRA_PACKAGE_NAME) ?: return Result.success()
     val title = inputData.getString(NotificationService.EXTRA_TITLE).orEmpty()
+    val appName = inputData.getString(NotificationService.EXTRA_APP_NAME).orEmpty().ifBlank { pkg }
     val text = inputData.getString(NotificationService.EXTRA_TEXT).orEmpty()
     val isTruncated = inputData.getBoolean(NotificationService.EXTRA_IS_TRUNCATED, false)
     val category = inputData.getString(NotificationService.EXTRA_CATEGORY).orEmpty()
@@ -931,7 +949,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
         return Result.success()
       }
       AppProcessState.ALIVE_IN_BACKGROUND -> {
-        if (tryStartHeadlessTask(pkg, title, text, isTruncated, category, isOngoing)) {
+        if (tryStartHeadlessTask(pkg, appName, title, text, isTruncated, category, isOngoing)) {
           Log.d(DEBUG_TAG, "[DEBUG-notif] worker delegated to headless js pkg=\${pkg}")
           return Result.success()
         }
@@ -942,7 +960,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       }
     }
 
-    return runNativeFallback(pkg, title, text, isTruncated)
+    return runNativeFallback(pkg, appName, title, text, isTruncated)
   }
 
   private enum class AppProcessState {
@@ -953,6 +971,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
 
   private fun runNativeFallback(
     pkg: String,
+    appName: String,
     title: String,
     text: String,
     isTruncated: Boolean
@@ -985,8 +1004,8 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       }
       val clipped = text.trim().take(120)
       postNotification(
-        "Action Needed: Paste Full Message",
-        "ThreatLens couldn't read the full message from \${title.ifBlank { pkg }}. Tap to paste it in Scanner.",
+        "Message was cut off",
+        "We only saw part of a message from \${title.ifBlank { appName }}. Tap to paste all of it.",
         "threatlens://scanner?prefill=\${Uri.encode(clipped)}"
       )
       Log.d(DEBUG_TAG, "[DEBUG-notif] worker prompt truncated pkg=\${pkg}")
@@ -1005,10 +1024,12 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     }
     val encoded = Base64.encodeToString(scanJson.toString().toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
     val deepLink = "threatlens://scan/result?data=\${Uri.encode(encoded)}"
-    val (t, b) = if (result.classification == "PROMO")
-      Pair("Promotional Message Detected", "A promotional message was received from $pkg.")
-    else Pair("Threat Alert: \${result.classification}",
-      "Potential \${result.classification.lowercase()} content detected from $pkg. Tap for full analysis.")
+    // Same wording as src/utils/alertText.ts.
+    val (t, b) = when (result.classification) {
+      "PROMO" -> Pair("Looks like a promo", "A message in \${appName} looks like an ad or offer.")
+      "PHISHING" -> Pair("Possible phishing message", "A message in \${appName} looks like phishing. Tap to see why.")
+      else -> Pair("Possible scam message", "A message in \${appName} looks like a scam. Tap to see why.")
+    }
     postNotification(t, b, deepLink)
     Log.d(DEBUG_TAG, "[DEBUG-notif] worker alert posted pkg=\${pkg} cls=\${result.classification}")
     return Result.success()
@@ -1049,6 +1070,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
 
   private fun tryStartHeadlessTask(
     pkg: String,
+    appName: String,
     title: String,
     text: String,
     isTruncated: Boolean,
@@ -1058,6 +1080,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     return try {
       val intent = Intent(applicationContext, HeadlessNotificationTaskService::class.java).apply {
         putExtra(NotificationService.EXTRA_PACKAGE_NAME, pkg)
+        putExtra(NotificationService.EXTRA_APP_NAME, appName)
         putExtra(NotificationService.EXTRA_TITLE, title)
         putExtra(NotificationService.EXTRA_TEXT, text)
         putExtra(NotificationService.EXTRA_IS_TRUNCATED, isTruncated)
@@ -1196,7 +1219,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val mgr = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
-    mgr.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Threat Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
+    mgr.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Scam alerts", NotificationManager.IMPORTANCE_HIGH).apply {
       enableVibration(true); vibrationPattern = longArrayOf(0,250,250,250)
       lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
     })

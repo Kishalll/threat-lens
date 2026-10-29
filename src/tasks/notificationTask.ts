@@ -4,6 +4,7 @@ import { sendLocalNotification } from "../services/notificationService";
 import { useScannerStore } from "../stores/scannerStore";
 import { useSettingsStore } from "../stores/settingsStore";
 import { log } from "../utils/activityLog";
+import { pastePromptText, promoAlertText, threatAlertText } from "../utils/alertText";
 import {
   isLikelyMessagingPackage,
   isLikelySystemOrServiceNotification,
@@ -16,6 +17,7 @@ const DANGEROUS = new Set(["SCAM", "PHISHING"]);
 
 type TaskData = {
   packageName?: string;
+  appName?: string;
   title?: string;
   text?: string;
   isTruncated?: boolean;
@@ -37,6 +39,7 @@ async function persistPendingScan(result: ScanResult): Promise<void> {
 
 export default async function notificationTask(taskData: TaskData): Promise<void> {
   const { packageName = "", title = "", text = "", isTruncated = false, category = "", isOngoing = false } = taskData;
+  const appName = taskData.appName || packageName;
 
   // The in-app listener handles notifications while the app is open.
   if (AppState.currentState === "active") return;
@@ -70,9 +73,10 @@ export default async function notificationTask(taskData: TaskData): Promise<void
         return;
       }
       log("paste_prompt", `truncated notif from ${packageName} [headless]`);
+      const alert = pastePromptText(title || appName);
       await sendLocalNotification(
-        "Action Needed: Paste Full Message",
-        `ThreatLens couldn't read the full message from ${title || packageName}. Tap to paste it in Scanner.`,
+        alert.title,
+        alert.body,
         { type: "PASTE_FULL_NOTIFICATION_PROMPT", sourcePackage: packageName, capturedText: text.trim().slice(0, 120), threatlensInternal: true }
       );
       return;
@@ -92,9 +96,10 @@ export default async function notificationTask(taskData: TaskData): Promise<void
         return;
       }
       log("alert_sent", `PROMO from ${packageName} [headless]`);
+      const alert = promoAlertText(appName);
       await sendLocalNotification(
-        "Promotional Message Detected",
-        `A promotional message was received from ${packageName}.`,
+        alert.title,
+        alert.body,
         { type: "PROMO_ALERT", classification: result.classification, sourcePackage: packageName, encodedResult, threatlensInternal: true }
       );
       return;
@@ -103,9 +108,10 @@ export default async function notificationTask(taskData: TaskData): Promise<void
     if (!DANGEROUS.has(result.classification)) return;
 
     log("alert_sent", `${result.classification} from ${packageName} [headless]`);
+    const alert = threatAlertText(result.classification, appName);
     await sendLocalNotification(
-      `Threat Alert: ${result.classification}`,
-      `Potential ${result.classification.toLowerCase()} detected from ${packageName}. Tap for analysis.`,
+      alert.title,
+      alert.body,
       { type: "THREAT_ALERT", classification: result.classification, sourcePackage: packageName, encodedResult, threatlensInternal: true }
     );
   } catch {

@@ -71,7 +71,7 @@ export default function ShieldScreen() {
         </SettingsButton>
       </View>
       <Text style={styles.subtitle}>
-        Add a Digital Fingerprint to your photos. Verify if an image has been Tampered with.
+        Mark your photos so you can tell later if someone edited them.
       </Text>
 
       <View style={styles.modeSwitcher}>

@@ -13,7 +13,7 @@ export default function SafetyScoreBar({ score }: Props) {
   const { colors } = useTheme();
   const animatedWidth = useRef(new Animated.Value(0)).current;
   const color = { good: colors.accent, warn: colors.warning, bad: colors.danger }[scoreBand(score)];
-  const label = score >= 80 ? "Stable" : score >= 50 ? "Needs Attention" : "At Risk";
+  const label = score >= 80 ? "Good" : score >= 50 ? "Needs a look" : "At risk";
 
   useEffect(() => {
     Animated.timing(animatedWidth, {
@@ -26,7 +26,7 @@ export default function SafetyScoreBar({ score }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.scoreHero}>
-        <Text style={styles.title}>Digital Safety Score</Text>
+        <Text style={styles.title}>Safety score</Text>
         <View style={styles.heroRow}>
           <Text style={[styles.scoreText, { color }]}>{score}</Text>
           <Text style={styles.outOfText}>/100</Text>

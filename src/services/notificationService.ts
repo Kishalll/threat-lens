@@ -17,7 +17,7 @@ Notifications.setNotificationHandler({
 export async function setupNotificationChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync(THREAT_CHANNEL_ID, {
-    name: 'Threat Alerts',
+    name: 'Scam alerts',
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#FF231F7C',

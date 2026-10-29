@@ -240,7 +240,7 @@ export function embedDctWatermark(
     return {
       success: false,
       modifiedRgba: rgba,
-      error: `Image is too small for watermark. Need ${TOTAL_BLOCKS_NEEDED} blocks, image has ${totalBlocks}.`,
+      error: "This photo is too small to protect.",
     };
   }
 

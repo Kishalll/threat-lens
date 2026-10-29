@@ -15,6 +15,7 @@ import {
   type StoredCredential,
 } from "../services/storageService";
 import { sendLocalNotification } from "../services/notificationService";
+import { breachAlertText } from "../utils/alertText";
 import { useSettingsStore } from "./settingsStore";
 import { generateBreachGuidance } from "../services/nimService";
 import { useDashboardStore } from "./dashboardStore";
@@ -282,7 +283,7 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
 
     const guidance = await generateBreachGuidance(breach);
     if (guidance.isFallback) {
-      throw new Error("AI guidance is temporarily unavailable. Please try reopening this breach.");
+      throw new Error("Couldn't make a plan right now. Open this breach again to retry.");
     }
 
     get().saveBreachGuidance(id, guidance);
@@ -363,9 +364,10 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
         .pruneSuggestionsForSource("breach", outcome.breaches.map((breach) => breach.id));
 
       if (notifyOnNew && outcome.alertPayload && useSettingsStore.getState().settings.breach.alerts) {
+        const alert = breachAlertText(outcome.alertPayload.count, outcome.alertPayload.credentialSummary);
         await sendLocalNotification(
-          "New Data Breach Detected",
-          `New breach data found for ${outcome.alertPayload.credentialSummary}. Tap to review in Breach tab.`,
+          alert.title,
+          alert.body,
           {
             type: "BREACH_ALERT",
             breachIds: outcome.alertPayload.breachIds,
@@ -380,12 +382,12 @@ export const useBreachStore = create<BreachState>()((set, get) => ({
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Breach data fetch failed. Please try again.";
+          : "Couldn't check for breaches.";
 
       set({
         breaches: [],
         isScanning: false,
-        scanError: `${message} Please try again.`,
+        scanError: `${message} Try again.`,
       });
 
       persistBreachCacheAsync([]);

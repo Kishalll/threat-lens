@@ -32,6 +32,7 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 - The killed-app worker (`NotificationWorker.kt`) is generated from `withThreatLensConfig.js`; change the template there, not only the file under `android/`.
 - Deprecated or unavailable models (HTTP 410 or 404) trigger automatic fallback to the next configured model.
 - The prompt treats an unknown or short-code sender as no threat by itself, and a "do not share" warning in an OTP or bank message as a sign the message is genuine.
+- The prompt (JS and the worker) asks for plain wording: a 1-2 sentence explanation, red flags of a few words, short actions, no jargon. The breach guidance prompt asks for the same.
 - Guardrails, applied after the model:
   - "Never / do not share your OTP or PIN" sentences are removed before pattern matching, so a safety warning is never read as a credential request.
   - Bank/UPI transaction alerts and delivery updates that the model flagged are returned to `SAFE` unless they ask for credentials, carry a link shortener, or pair urgency with a personal mobile number or link.
@@ -80,6 +81,7 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 - Duplicate scan records must be suppressed by stable scan id.
 - Retention follows the "Keep history" setting (30 days, 90 days, custom, forever). Older scans are deleted from the database when history loads, after each new scan, and when the setting changes. A shorter setting that would delete saved scans asks first.
 - Clear scan history deletes every saved scan from the database, not only from the screen, and resyncs the dashboard.
+- Scanner history has filter chips: All, Pending actions, Phishing, Scam, Promo, Safe, each with a count (`src/utils/historyFilters.ts`). `UNAVAILABLE` scans show only under All.
 
 ### Alerts And Routing
 
@@ -88,11 +90,16 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 - Tapping a scan alert opens the scan result screen with the encoded result payload.
 - If the app cold-starts from a notification-opened scan result, Android back and header back must land on Scanner, not exit the app.
 - Paste-prompt alerts must route to Scanner with prefilled text.
+- Alert wording lives in `src/utils/alertText.ts`. The killed-app worker posts the same text from `withThreatLensConfig.js`, so change both together.
+- Alerts name the source app by its label ("WhatsApp"). The native listener looks it up and passes it as `appName` to the foreground event, the worker and the headless task; if the lookup fails, the package name is used.
+- The Android notification channel is called "Scam alerts".
 
 ### Dashboard Coupling
 
 - Non-`UNAVAILABLE` scan results contribute to dashboard scanned-message state.
 - Suggested actions from scan results register as dashboard suggestions.
+- Suggestion ids are stable (`suggestionId(source, sourceId, index)` over de-duplicated texts), so a ticked action stays ticked after relaunch.
+- A `SCAM` or `PHISHING` result with no actions from the model gets the defaults "Block the sender" and "Delete the message" (`effectiveSuggestedActions` in `src/stores/dashboardDerived.ts`).
 - Scan suggestion completion affects score the same way it does today.
 
 ## Breach
@@ -128,6 +135,7 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 ### Notifications
 
 - When `notifyOnNew` is enabled, breach alerts are on and new breaches are found, the app sends a local breach alert. The background task follows the same alerts setting.
+- The in-app and background alerts use the same text, with the breach count (`breachAlertText`).
 - Tapping a single-breach alert deep-links to that breach detail.
 - Tapping a multi-breach alert deep-links to the breach list.
 
@@ -146,6 +154,7 @@ Unless the user explicitly changes product behavior, refactors must preserve the
 ### Dashboard Coupling
 
 - Dashboard breach score math and pending-action behavior must remain unchanged.
+- Opening a breach only marks it resolved when all its actions are done. It never un-resolves a breach.
 - Removing credentials must prune related breach suggestions from the dashboard.
 
 ## Shield
@@ -239,6 +248,8 @@ The Shield area remains exactly:
 - Tabs are a swipeable pager (`@react-navigation/material-top-tabs` with the bar at the bottom). The custom `SwipeTabBar` follows the pager position. Scrolling tab screens leave `TAB_BAR_CLEARANCE` at the bottom so the floating bar never covers content.
 - Colours come only from `useTheme()` / `makeStyles()` in `src/hooks/useTheme.tsx`. `THEME` holds sizes and fonts only. Dark and light palettes live in `src/constants/theme.ts` with the same names.
 - App icon, adaptive icon, themed-icon layer, splash image and notification icon are rendered from SVG sources in `assets/icon-source/`. The notification icon (`ic_stat_threatlens`) is copied into `android/` by `withThreatLensConfig.js` and tinted mint.
+- Onboarding has three steps: notification access, breach monitoring, how it works. There is no sync step; the app has no sync.
+- User-facing text is short and plain, with no em dashes. Verify results lead with a plain headline; the technical checks stay in the detail lines.
 
 ## Refactor Guardrails
 

@@ -947,7 +947,7 @@ export async function verifySignedImage(
   } catch (e) {
     return {
       status: "CORRUPT",
-      summary: "Could not read image file for verification.",
+      summary: "Couldn't open this image.",
       checks,
       details: [e instanceof Error ? e.message : "File read failed"],
     };
@@ -960,7 +960,7 @@ export async function verifySignedImage(
   } catch {
     return {
       status: "NO_PROTECTION",
-      summary: "Image could not be parsed as JPEG.",
+      summary: "This image type isn't supported.",
       checks,
       details: ["JPEG decode failed."],
     };
@@ -972,7 +972,7 @@ export async function verifySignedImage(
   if (!extracted.watermarkHex) {
     return {
       status: "NO_PROTECTION",
-      summary: "No ThreatLens watermark was detected in this image.",
+      summary: "This photo wasn't protected with ThreatLens.",
       checks,
       details: [
         "No valid DCT watermark found in image frequencies.",
@@ -1000,7 +1000,7 @@ export async function verifySignedImage(
   if (!hashCheck) {
     return {
       status: "TAMPERED",
-      summary: "Image content was visually modified after watermarking.",
+      summary: "This photo was edited after it was protected.",
       checks,
       watermarkId,
       shaMatch: false,
@@ -1020,7 +1020,7 @@ export async function verifySignedImage(
   if (cloudLookup.status === "offline") {
     return {
       status: "INTEGRITY_VERIFIED",
-      summary: "Image pixels are intact and unaltered, but signing source cannot be confirmed while offline.",
+      summary: "Not edited, but we can't confirm who protected it while you're offline.",
       checks: { ...checks, cloudCheck: "offline" },
       watermarkId,
       shaMatch: hashCheck,
@@ -1036,7 +1036,7 @@ export async function verifySignedImage(
   if (cloudLookup.status === "not_found" || !cloudLookup.payload) {
     return {
       status: "INTEGRITY_VERIFIED",
-      summary: "Image pixels are intact, but no device record was found in the cloud registry.",
+      summary: "Not edited, but we couldn't confirm the device that protected it.",
       checks: { ...checks, cloudCheck: "failed" },
       watermarkId,
       shaMatch: hashCheck,
@@ -1059,7 +1059,7 @@ export async function verifySignedImage(
   if (!masterCertCheck) {
     return {
       status: "CLONE_APP",
-      summary: "Master certificate check failed. Image was not signed by an official app trust chain.",
+      summary: "Not edited, but it wasn't protected by the official ThreatLens app.",
       checks,
       payload,
       watermarkId,
@@ -1072,7 +1072,7 @@ export async function verifySignedImage(
   if (!signatureCheck) {
     return {
       status: "INVALID_SIGNATURE",
-      summary: "Signature validation failed for the cloud registry payload.",
+      summary: "The signature on this photo doesn't check out.",
       checks,
       payload,
       watermarkId,
@@ -1088,7 +1088,7 @@ export async function verifySignedImage(
   if (cloud.revoked) {
     return {
       status: "REVOKED",
-      summary: "Cloud registry reports this signing device as revoked.",
+      summary: "The device that protected this photo has been blocked.",
       checks,
       payload,
       watermarkId,
@@ -1101,7 +1101,7 @@ export async function verifySignedImage(
   if (cloud.cloudCheck === "failed") {
     return {
       status: "CORRUPT",
-      summary: "Image pixels are valid, but cloud registry device validation failed.",
+      summary: "Not edited, but we couldn't confirm the device that protected it.",
       checks,
       payload,
       watermarkId,
@@ -1113,7 +1113,7 @@ export async function verifySignedImage(
 
   return {
     status: "AUTHENTIC",
-    summary: "All DCT integrity and cloud device verification checks passed. Image is authentic.",
+    summary: "Not edited since it was protected, and it came from a trusted device.",
     checks,
     payload,
     watermarkId,

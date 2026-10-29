@@ -78,7 +78,7 @@ export default function ClassificationCard({
       <Text style={styles.explanationText}>{result.explanation}</Text>
 
       <View style={styles.sectionWrap}>
-        <Text style={styles.sectionTitle}>Red Flags</Text>
+        <Text style={styles.sectionTitle}>Red flags</Text>
         {result.redFlags.length > 0 ? (
           result.redFlags.map((flag, index) => (
             <Text key={`${flag}-${index}`} style={styles.listText}>
@@ -86,12 +86,12 @@ export default function ClassificationCard({
             </Text>
           ))
         ) : (
-          <Text style={styles.listText}>None identified.</Text>
+          <Text style={styles.listText}>None found.</Text>
         )}
       </View>
 
       <View style={styles.sectionWrap}>
-        <Text style={styles.sectionTitle}>Suggested Actions</Text>
+        <Text style={styles.sectionTitle}>What to do</Text>
         {result.suggestedActions.length > 0 ? (
           result.suggestedActions.map((action, index) => (
             <Text key={`${action}-${index}`} style={styles.listText}>
@@ -99,7 +99,7 @@ export default function ClassificationCard({
             </Text>
           ))
         ) : (
-          <Text style={styles.listText}>No immediate action suggested.</Text>
+          <Text style={styles.listText}>Nothing to do.</Text>
         )}
       </View>
     </View>

@@ -123,8 +123,8 @@ export default function RootLayout() {
       const granted = await isNotificationAccessGranted();
       if (granted) return;
       Alert.alert(
-        "Enable Notification Access",
-        "ThreatLens needs Notification Access to scan incoming notifications automatically.",
+        "Turn on notification access",
+        "ThreatLens reads your notifications so it can catch scam messages as they arrive.",
         [
           { text: "Not now", style: "cancel" },
           { text: "Open Settings", onPress: () => openNotificationAccessSettings() },

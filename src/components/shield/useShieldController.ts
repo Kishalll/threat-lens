@@ -239,7 +239,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Unable to sign this image.";
+          : "Couldn't protect this photo.";
       setErrorMessage(message);
       setProtectStep("error");
     } finally {
@@ -310,7 +310,7 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Verification failed.";
+          : "Couldn't check this image.";
 
       log("img_verify_fail", message);
       setErrorMessage(message);
@@ -461,12 +461,12 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
           await MediaLibrary.createAlbumAsync(PROTECTED_ALBUM_NAME, asset, false);
         }
 
-        showToast(`Signed image saved to '${PROTECTED_ALBUM_NAME}' album.`, "success");
+        showToast(`Saved to the ${PROTECTED_ALBUM_NAME} album.`, "success");
       } else {
-        showToast("Allow gallery permission to save image.", "error");
+        showToast("Allow photo access to save it.", "error");
       }
     } catch {
-      showToast("Could not save signed image.", "error");
+      showToast("Couldn't save the photo.", "error");
     }
   }, [getProtectedDirectoryUri, requestProtectedDirectoryUri, signedImageUri, showToast]);
 
