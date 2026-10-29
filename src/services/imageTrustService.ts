@@ -646,7 +646,7 @@ async function storeImagePayloadInCloud(payload: SignedImagePayload): Promise<bo
   }
 }
 
-async function lookupImagePayloadFromCloud(watermarkId: string): Promise<{
+async function lookupImagePayloadFromCloud(watermarkId: string, signal?: AbortSignal): Promise<{
   status: "found" | "not_found" | "offline";
   payload?: SignedImagePayload;
   error?: string;
@@ -666,6 +666,7 @@ async function lookupImagePayloadFromCloud(watermarkId: string): Promise<{
     const res = await fetch(`${imageUrl}/lookup?watermarkId=${encodeURIComponent(watermarkId)}`, {
       method: "GET",
       headers,
+      signal,
     });
 
     if (res.status === 404) {
@@ -927,13 +928,14 @@ export async function protectImageWithSignature(
 
 export async function verifySignedImage(
   imageUri: string,
-  options?: { cloudCheck?: boolean }
+  // The cloud registry check always runs; only being offline skips it.
+  options?: ProtectCancelOptions
 ): Promise<VerificationResult> {
   const checks: VerificationChecks = {
     hashCheck: false,
     signatureCheck: false,
     masterCertCheck: false,
-    cloudCheck: options?.cloudCheck === false ? "skipped" : "skipped",
+    cloudCheck: "skipped",
   };
 
   let imageBytes: Uint8Array;
@@ -950,6 +952,7 @@ export async function verifySignedImage(
       details: [e instanceof Error ? e.message : "File read failed"],
     };
   }
+  await throwIfCancelled(options);
 
   let decoded: { data: Uint8Array; width: number; height: number };
   try {
@@ -962,8 +965,10 @@ export async function verifySignedImage(
       details: ["JPEG decode failed."],
     };
   }
+  await throwIfCancelled(options);
 
   const extracted = extractDctWatermark(decoded.data, decoded.width, decoded.height);
+  await throwIfCancelled(options);
   if (!extracted.watermarkHex) {
     return {
       status: "NO_PROTECTION",
@@ -983,6 +988,7 @@ export async function verifySignedImage(
   const embeddedPhash = watermarkId.slice(16, 32);
 
   const recomputed = extractPixelDigestAndPHash(imageBytes);
+  await throwIfCancelled(options);
   const pHashDistance = hammingDistanceHex(recomputed.pHash, embeddedPhash);
 
   // dHash comparison is the offline tamper check. It operates at a coarse 9x8 grid
@@ -1007,23 +1013,9 @@ export async function verifySignedImage(
     };
   }
 
-  if (options?.cloudCheck === false) {
-    return {
-      status: "INTEGRITY_VERIFIED",
-      summary: "Image pixel integrity is verified, but cloud verification was skipped.",
-      checks: { ...checks, cloudCheck: "skipped" },
-      watermarkId,
-      shaMatch: hashCheck,
-      pHashDistance,
-      details: [
-        "DCT watermark verified.",
-        "Pixel hash matched.",
-        "Cloud verification skipped by user setting.",
-      ],
-    };
-  }
-
-  const cloudLookup = await lookupImagePayloadFromCloud(watermarkId);
+  const cloudLookup = await lookupImagePayloadFromCloud(watermarkId, options?.signal);
+  // An aborted lookup reports "offline"; make sure a cancel stays a cancel.
+  await throwIfCancelled(options);
 
   if (cloudLookup.status === "offline") {
     return {

@@ -32,11 +32,12 @@ export default function ShieldScreen() {
     protectedFolderDisplay,
     settingsLoading,
     signedImageUri,
-    verifyCloudCheck,
+    verifyCancelling,
     verifyLoading,
     verifyResult,
     verifySourceUri,
     cancelProtectFlow,
+    cancelVerifyFlow,
     changeProtectedFolder,
     pickProtectImage,
     pickVerifyImage,
@@ -48,7 +49,6 @@ export default function ShieldScreen() {
     runVerifyFlow,
     saveToGallery,
     selectMode,
-    setVerifyCloudCheck,
   } = useShieldController(showToast);
 
   return (
@@ -131,7 +131,7 @@ export default function ShieldScreen() {
             verifySourceUri={verifySourceUri}
             verifyResult={verifyResult}
             verifyLoading={verifyLoading}
-            verifyCloudCheck={verifyCloudCheck}
+            verifyCancelling={verifyCancelling}
             statusMeta={statusMeta(colors)}
             onReset={resetVerifyState}
             onPickImage={() => {
@@ -140,7 +140,7 @@ export default function ShieldScreen() {
             onVerify={() => {
               void runVerifyFlow();
             }}
-            onToggleCloudCheck={setVerifyCloudCheck}
+            onCancel={cancelVerifyFlow}
           />
         ) : null}
 
@@ -253,17 +253,6 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "row",
     gap: 10,
     marginBottom: 10,
-  },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  switchLabel: {
-    color: colors.textPrimary,
-    fontFamily: THEME.fontFamily.dmSans,
-    fontWeight: "700",
   },
   resultCard: {
     marginTop: 8,

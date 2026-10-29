@@ -1,13 +1,16 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
-  Switch,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import Feather from "@expo/vector-icons/Feather";
 
 import type { VerificationResult } from "../../types/imageTrust";
@@ -18,12 +21,12 @@ interface VerifyPanelProps {
   verifySourceUri: string | null;
   verifyResult: VerificationResult | null;
   verifyLoading: boolean;
-  verifyCloudCheck: boolean;
+  verifyCancelling: boolean;
   statusMeta: Record<string, { label: string; color: string; icon: React.ComponentProps<typeof Feather>["name"] }>;
   onReset: () => void;
   onPickImage: () => void;
   onVerify: () => void;
-  onToggleCloudCheck: (value: boolean) => void;
+  onCancel: () => void;
 }
 
 export default function VerifyPanel({
@@ -31,14 +34,33 @@ export default function VerifyPanel({
   verifySourceUri,
   verifyResult,
   verifyLoading,
-  verifyCloudCheck,
+  verifyCancelling,
   statusMeta,
   onReset,
   onPickImage,
   onVerify,
-  onToggleCloudCheck,
+  onCancel,
 }: VerifyPanelProps) {
   const { colors } = useTheme();
+  const isVerifying = verifyLoading && !verifyCancelling;
+
+  // The JS thread is blocked while decoding and reading the watermark, so the
+  // cancel tap flips this on the UI thread and "Cancelling..." shows without waiting for JS.
+  const cancelTapped = useSharedValue(0);
+
+  useEffect(() => {
+    cancelTapped.value = verifyCancelling ? 1 : 0;
+  }, [verifyLoading, verifyCancelling]);
+
+  const cancelTap = Gesture.Tap()
+    .enabled(isVerifying)
+    .onStart(() => {
+      cancelTapped.value = 1;
+      scheduleOnRN(onCancel);
+    });
+
+  const cancelLabelStyle = useAnimatedStyle(() => ({ opacity: 1 - cancelTapped.value }));
+  const cancellingStyle = useAnimatedStyle(() => ({ opacity: cancelTapped.value }));
   return (
     <View style={styles.card}>
       <View style={styles.imageContainer}>
@@ -50,31 +72,36 @@ export default function VerifyPanel({
             <Text style={styles.placeholderText}>Select an image to verify</Text>
           </View>
         )}
-        {verifySourceUri && (
+        {verifySourceUri && !verifyLoading && (
           <TouchableOpacity style={styles.clearButton} onPress={onReset}>
             <Feather name="x" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
       </View>
 
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Cloud revocation check</Text>
-        <Switch
-          value={verifyCloudCheck}
-          onValueChange={onToggleCloudCheck}
-          thumbColor={verifyCloudCheck ? colors.accent : colors.switchThumbOff}
-          trackColor={{ false: colors.switchTrackOff, true: colors.switchTrackOn }}
-        />
-      </View>
-
       <View style={styles.actionsRow}>
-        <Pressable
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
-          onPress={onPickImage}
-        >
-          <Feather name="upload" size={18} color={colors.textPrimary} />
-          <Text style={styles.secondaryButtonText}>Select</Text>
-        </Pressable>
+        {verifyLoading ? (
+          <GestureDetector gesture={cancelTap}>
+            <Animated.View style={styles.cancelButton} accessibilityRole="button">
+              <Animated.View style={[local.row, cancelLabelStyle]}>
+                <Feather name="x" size={18} color={colors.danger} />
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Animated.View>
+              <Animated.View style={[StyleSheet.absoluteFill, local.row, cancellingStyle]}>
+                <ActivityIndicator size="small" color={colors.danger} />
+                <Text style={styles.cancelButtonText}>Cancelling...</Text>
+              </Animated.View>
+            </Animated.View>
+          </GestureDetector>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
+            onPress={onPickImage}
+          >
+            <Feather name="upload" size={18} color={colors.textPrimary} />
+            <Text style={styles.secondaryButtonText}>Select</Text>
+          </Pressable>
+        )}
 
         <Pressable
           style={({ pressed }) => [
@@ -139,3 +166,12 @@ export default function VerifyPanel({
     </View>
   );
 }
+
+const local = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+});

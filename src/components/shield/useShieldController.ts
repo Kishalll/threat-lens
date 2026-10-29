@@ -83,7 +83,12 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   const [verifySourceUri, setVerifySourceUri] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null);
   const [verifyLoading, setVerifyLoading] = useState<boolean>(false);
-  const [verifyCloudCheck, setVerifyCloudCheck] = useState<boolean>(true);
+  const [verifyCancelling, setVerifyCancelling] = useState<boolean>(false);
+
+  // In-flight verify run bookkeeping, kept separate from protect's.
+  const verifyAbortRef = useRef<AbortController | null>(null);
+  const verifyCancelledRef = useRef<boolean>(false);
+  const verifyRunIdRef = useRef<number>(0);
 
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
   const [protectedExportDirUri, setProtectedExportDirUri] = useState<string | null>(null);
@@ -127,8 +132,16 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   }, []);
 
   const resetVerifyState = useCallback(() => {
+    // Invalidate and abort any in-flight verify run so it cannot overwrite the reset state.
+    verifyRunIdRef.current += 1;
+    verifyAbortRef.current?.abort();
+    verifyAbortRef.current = null;
+    verifyCancelledRef.current = false;
+
     setVerifySourceUri(null);
     setVerifyResult(null);
+    setVerifyLoading(false);
+    setVerifyCancelling(false);
     setErrorMessage(null);
   }, []);
 
@@ -250,17 +263,31 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
   }, []);
 
   const runVerifyFlow = useCallback(async () => {
-    if (!verifySourceUri) {
+    if (!verifySourceUri || verifyAbortRef.current) {
       return;
     }
 
+    const runId = verifyRunIdRef.current + 1;
+    verifyRunIdRef.current = runId;
+    const controller = new AbortController();
+    verifyAbortRef.current = controller;
+    verifyCancelledRef.current = false;
+    const isStale = () => verifyRunIdRef.current !== runId;
+
     setVerifyLoading(true);
+    setVerifyCancelling(false);
     setErrorMessage(null);
 
     try {
       const result = await verifySignedImage(verifySourceUri, {
-        cloudCheck: verifyCloudCheck,
+        signal: controller.signal,
+        isCancelled: () => verifyCancelledRef.current || isStale(),
       });
+
+      // Reset, or a cancel that landed after the last checkpoint: drop the result.
+      if (isStale() || verifyCancelledRef.current) {
+        return;
+      }
       setVerifyResult(result);
 
       if (result.status === "AUTHENTIC" || result.status === "INTEGRITY_VERIFIED") {
@@ -269,6 +296,17 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
         log("img_verify_fail", result.summary);
       }
     } catch (error) {
+      if (isStale()) {
+        return;
+      }
+
+      if (verifyCancelledRef.current || isAbortError(error)) {
+        // Cancelled: show nothing, keep the selected image.
+        setVerifyResult(null);
+        setErrorMessage(null);
+        return;
+      }
+
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
@@ -278,9 +316,26 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
       setErrorMessage(message);
       setVerifyResult(null);
     } finally {
-      setVerifyLoading(false);
+      if (!isStale()) {
+        verifyAbortRef.current = null;
+        verifyCancelledRef.current = false;
+        setVerifyLoading(false);
+        setVerifyCancelling(false);
+      }
     }
-  }, [verifyCloudCheck, verifySourceUri]);
+  }, [verifySourceUri]);
+
+  const cancelVerifyFlow = useCallback(() => {
+    const controller = verifyAbortRef.current;
+    if (!controller || verifyCancelledRef.current) {
+      return;
+    }
+
+    // Show "Cancelling..." immediately; the run unwinds in the background.
+    verifyCancelledRef.current = true;
+    setVerifyCancelling(true);
+    controller.abort();
+  }, []);
 
   const requestProtectedDirectoryUri = useCallback(async (): Promise<string | null> => {
     if (Platform.OS !== "android") {
@@ -446,11 +501,12 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     protectedFolderDisplay,
     settingsLoading,
     signedImageUri,
-    verifyCloudCheck,
+    verifyCancelling,
     verifyLoading,
     verifyResult,
     verifySourceUri,
     cancelProtectFlow,
+    cancelVerifyFlow,
     changeProtectedFolder,
     pickProtectImage,
     pickVerifyImage,
@@ -462,6 +518,5 @@ export function useShieldController(showToast: (msg: string, variant?: ToastVari
     runVerifyFlow,
     saveToGallery,
     selectMode,
-    setVerifyCloudCheck,
   };
 }
