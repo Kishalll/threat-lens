@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, Text, TextInput, View } from "react-native";
 
 import { THEME } from "../../constants/theme";
+import { makeStyles } from "../../hooks/useTheme";
 import { getInstalledApps, syncScannerSettingsToNative, type InstalledApp } from "../../services/nativeSettings";
 import { useScannerStore } from "../../stores/scannerStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -39,6 +40,7 @@ const UNIT_OPTIONS: { value: RetentionUnit; label: string }[] = [
 ];
 
 export default function ScannerSettings() {
+  const styles = useStyles();
   const scanner = useSettingsStore((state) => state.settings.scanner);
   const update = useSettingsStore((state) => state.update);
   const [apps, setApps] = useState<InstalledApp[] | null>(null);
@@ -208,7 +210,7 @@ export default function ScannerSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   historyBody: {
     padding: 10,
     gap: 10,
@@ -224,8 +226,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
-    color: THEME.colors.textPrimary,
+    borderColor: colors.borderStrong,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 15,
     textAlign: "center",
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   error: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.caption,
   },
@@ -243,10 +245,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: THEME.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.danger,
+    borderColor: colors.danger,
   },
   clearText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.body,
     fontWeight: "700",
@@ -257,4 +259,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.45,
   },
-});
+}));

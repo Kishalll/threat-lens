@@ -1,8 +1,10 @@
 import React from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, Switch, Text, View } from "react-native";
 import { THEME } from "../../constants/theme";
+import { makeStyles, useTheme } from "../../hooks/useTheme";
 
 export function SettingsSection({ title, children }: { title?: string; children: React.ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.section}>
       {title ? <Text style={styles.sectionTitle}>{title}</Text> : null}
@@ -20,6 +22,7 @@ interface SettingsRowProps {
 }
 
 export function SettingsRow({ label, description, right, disabled, first }: SettingsRowProps) {
+  const styles = useStyles();
   return (
     <View style={[styles.row, !first && styles.rowDivider, disabled && styles.disabled]}>
       <View style={styles.rowText}>
@@ -37,6 +40,7 @@ interface SettingsSwitchProps extends Omit<SettingsRowProps, "right"> {
 }
 
 export function SettingsSwitch({ value, onValueChange, disabled, ...row }: SettingsSwitchProps) {
+  const { colors } = useTheme();
   return (
     <SettingsRow
       {...row}
@@ -47,8 +51,8 @@ export function SettingsSwitch({ value, onValueChange, disabled, ...row }: Setti
           onValueChange={onValueChange}
           disabled={disabled}
           accessibilityLabel={row.label}
-          thumbColor={value ? THEME.colors.accent : "#B8BDC6"}
-          trackColor={{ false: "#4A5160", true: "#2B7A5A" }}
+          thumbColor={value ? colors.accent : colors.switchThumbOff}
+          trackColor={{ false: colors.switchTrackOff, true: colors.switchTrackOn }}
         />
       }
     />
@@ -63,6 +67,7 @@ interface OptionPickerProps<T extends string | number> {
 }
 
 export function OptionPicker<T extends string | number>({ options, value, onChange, disabled }: OptionPickerProps<T>) {
+  const styles = useStyles();
   return (
     <View style={[styles.picker, disabled && styles.disabled]}>
       {options.map((option) => {
@@ -85,25 +90,26 @@ export function OptionPicker<T extends string | number>({ options, value, onChan
 }
 
 export function SettingsNote({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
   return <Text style={styles.note}>{children}</Text>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   section: {
     gap: 8,
   },
   sectionTitle: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 11,
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   sectionCard: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderRadius: THEME.radius.md,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   row: {
@@ -115,19 +121,19 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
+    borderTopColor: colors.border,
   },
   rowText: {
     flex: 1,
     gap: 2,
   },
   rowLabel: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.body,
   },
   rowDescription: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.caption,
   },
@@ -140,8 +146,8 @@ const styles = StyleSheet.create({
     padding: 4,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.backgroundElevated,
+    borderColor: colors.border,
+    backgroundColor: colors.backgroundElevated,
   },
   pickerOption: {
     flex: 1,
@@ -150,23 +156,23 @@ const styles = StyleSheet.create({
     borderRadius: 9,
   },
   pickerOptionSelected: {
-    backgroundColor: THEME.colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
+    borderColor: colors.borderStrong,
   },
   pickerText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
   },
   pickerTextSelected: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontWeight: "700",
   },
   note: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.caption,
     lineHeight: 18,
   },
-});
+}));

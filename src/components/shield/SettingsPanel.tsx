@@ -1,8 +1,9 @@
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { THEME } from "../../constants/theme";
+import { makeStyles, useTheme } from "../../hooks/useTheme";
 import { SettingsRow, SettingsSection } from "../settings/SettingsControls";
 
 interface DeviceSnapshot {
@@ -25,8 +26,10 @@ interface SettingsPanelProps {
 }
 
 function Presence({ present }: { present: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
-    <Text style={[styles.value, { color: present ? THEME.colors.accent : THEME.colors.danger }]}>
+    <Text style={[styles.value, { color: present ? colors.accent : colors.danger }]}>
       {present ? "Present" : "Missing"}
     </Text>
   );
@@ -40,16 +43,18 @@ export default function SettingsPanel({
   onChangeFolder,
   onResetFolder,
 }: SettingsPanelProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   if (settingsLoading && !deviceSnapshot) {
     return (
       <View style={styles.loadingRow}>
-        <ActivityIndicator size="small" color={THEME.colors.accent} />
+        <ActivityIndicator size="small" color={colors.accent} />
         <Text style={styles.loadingText}>Loading trust settings...</Text>
       </View>
     );
   }
 
-  const statusColor = isAllSet ? THEME.colors.accent : THEME.colors.danger;
+  const statusColor = isAllSet ? colors.accent : colors.danger;
 
   return (
     <>
@@ -62,14 +67,14 @@ export default function SettingsPanel({
                 style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
                 onPress={onChangeFolder}
               >
-                <Feather name="folder-plus" size={16} color={THEME.colors.textPrimary} />
+                <Feather name="folder-plus" size={16} color={colors.textPrimary} />
                 <Text style={styles.actionText}>Change folder</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
                 onPress={onResetFolder}
               >
-                <Feather name="rotate-ccw" size={16} color={THEME.colors.textPrimary} />
+                <Feather name="rotate-ccw" size={16} color={colors.textPrimary} />
                 <Text style={styles.actionText}>Reset</Text>
               </Pressable>
             </View>
@@ -92,7 +97,7 @@ export default function SettingsPanel({
           <SettingsRow
             label="Install ID"
             right={
-              <Text style={[styles.mono, !deviceSnapshot.installID && { color: THEME.colors.danger }]} numberOfLines={1}>
+              <Text style={[styles.mono, !deviceSnapshot.installID && { color: colors.danger }]} numberOfLines={1}>
                 {deviceSnapshot.installID ?? "Not generated"}
               </Text>
             }
@@ -107,14 +112,14 @@ export default function SettingsPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
   loadingText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
   },
   folderBody: {
@@ -122,7 +127,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   folderText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.body,
   },
@@ -139,10 +144,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
+    borderColor: colors.borderStrong,
   },
   actionText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
     fontWeight: "700",
@@ -171,8 +176,8 @@ const styles = StyleSheet.create({
   },
   mono: {
     maxWidth: 150,
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
   },
-});
+}));

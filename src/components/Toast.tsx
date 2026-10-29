@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
-import { THEME } from "../constants/theme";
+import { THEME, type ThemeColors } from "../constants/theme";
+import { makeStyles, useTheme } from "../hooks/useTheme";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -11,16 +12,22 @@ interface ToastProps {
   onHide: () => void;
 }
 
-const VARIANT_CONFIG: Record<ToastVariant, { border: string; icon: React.ComponentProps<typeof Feather>["name"]; iconColor: string }> = {
-  success: { border: THEME.colors.accent, icon: "check-circle", iconColor: THEME.colors.accent },
-  error: { border: THEME.colors.danger, icon: "alert-circle", iconColor: THEME.colors.danger },
-  info: { border: THEME.colors.textTertiary, icon: "info", iconColor: THEME.colors.textTertiary },
-};
+function variantConfig(
+  colors: ThemeColors
+): Record<ToastVariant, { border: string; icon: React.ComponentProps<typeof Feather>["name"]; iconColor: string }> {
+  return {
+    success: { border: colors.accent, icon: "check-circle", iconColor: colors.accent },
+    error: { border: colors.danger, icon: "alert-circle", iconColor: colors.danger },
+    info: { border: colors.textTertiary, icon: "info", iconColor: colors.textTertiary },
+  };
+}
 
 export default function Toast({ message, variant, onHide }: ToastProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
-  const config = VARIANT_CONFIG[variant];
+  const config = variantConfig(colors)[variant];
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -66,7 +73,7 @@ export default function Toast({ message, variant, onHide }: ToastProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "center",
@@ -74,7 +81,7 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   card: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderRadius: THEME.radius.lg,
     paddingHorizontal: 24,
@@ -89,10 +96,10 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   text: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "600",
     fontSize: 14,
     textAlign: "center",
   },
-});
+}));

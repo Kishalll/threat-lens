@@ -1,8 +1,11 @@
 import React, { useState } from "react";
-import { StyleSheet, View, Text, Pressable, TextInput } from "react-native";
+import { View, Text, Pressable, TextInput } from "react-native";
 import { useRouter } from "expo-router";
+import { makeStyles, useTheme } from "../src/hooks/useTheme";
 
 export default function OnboardingScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState("");
@@ -40,7 +43,7 @@ export default function OnboardingScreen() {
             <TextInput
               style={styles.input}
               placeholder="you@example.com"
-              placeholderTextColor="#8B8F99"
+              placeholderTextColor={colors.muted}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -97,10 +100,10 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: "#0E0F11",
+    backgroundColor: colors.background,
     padding: 24,
     justifyContent: "space-between",
   },
@@ -109,39 +112,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    color: "#E8E9EB",
+    color: colors.textPrimary,
     fontFamily: "DMSans-Regular",
     fontSize: 28,
     fontWeight: "bold",
     marginBottom: 16,
   },
   body: {
-    color: "#8B8F99",
+    color: colors.muted,
     fontFamily: "DMSans-Regular",
     fontSize: 16,
     lineHeight: 24,
     marginBottom: 24,
   },
   input: {
-    backgroundColor: "#16181C",
-    borderColor: "#2A2D35",
+    backgroundColor: colors.surface,
+    borderColor: colors.neutral,
     borderWidth: 1,
     borderRadius: 8,
-    color: "#E8E9EB",
+    color: colors.textPrimary,
     padding: 16,
     fontSize: 16,
     fontFamily: "DMSans-Regular",
   },
   secondaryButton: {
-    backgroundColor: "#16181C",
-    borderColor: "#4ADE80",
+    backgroundColor: colors.surface,
+    borderColor: colors.statusGood,
     borderWidth: 1,
     padding: 16,
     borderRadius: 8,
     alignItems: "center",
   },
   secondaryButtonText: {
-    color: "#4ADE80",
+    color: colors.statusGood,
     fontFamily: "DMSans-Regular",
     fontSize: 16,
     fontWeight: "bold",
@@ -159,22 +162,22 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#2A2D35",
+    backgroundColor: colors.neutral,
   },
   activeDot: {
-    backgroundColor: "#4ADE80",
+    backgroundColor: colors.statusGood,
     width: 24,
   },
   button: {
-    backgroundColor: "#4ADE80",
+    backgroundColor: colors.statusGood,
     padding: 16,
     borderRadius: 8,
     alignItems: "center",
   },
   buttonText: {
-    color: "#0E0F11",
+    color: colors.onAccent,
     fontFamily: "DMSans-Regular",
     fontSize: 16,
     fontWeight: "bold",
   },
-});
+}));

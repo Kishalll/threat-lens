@@ -1,19 +1,17 @@
 import React, { useMemo } from "react";
-import {
-  StyleSheet,
-  View,
-  Text,
-  ScrollView,
-} from "react-native";
+import { View, Text, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import SafetyScoreBar from "../../src/components/SafetyScoreBar";
 import FeatureSummaryCard from "../../src/components/FeatureSummaryCard";
 import { THEME } from "../../src/constants/theme";
+import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import GeneralSettings from "../../src/components/home/GeneralSettings";
 
 export default function HomeScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const safetyScore = useDashboardStore((state) => state.SafetyScore);
   const activeBreachesCount = useDashboardStore((state) => state.activeBreachesCount);
@@ -92,7 +90,7 @@ export default function HomeScreen() {
           }
           icon="shield-off"
           statusColor={
-            effectiveActiveBreachesCount === 0 ? "#4ADE80" : "#F87171"
+            effectiveActiveBreachesCount === 0 ? colors.statusGood : colors.statusBad
           }
           badgeCount={effectiveActiveBreachesCount}
           timestampText={`Last checked: ${timeAgo(lastUpdateTimestamp)}`}
@@ -109,7 +107,7 @@ export default function HomeScreen() {
           value={`${flaggedMessagesScanCount} Flagged`}
           icon="message-square"
           statusColor={
-            flaggedMessagesScanCount === 0 ? "#4ADE80" : "#FBBF24"
+            flaggedMessagesScanCount === 0 ? colors.statusGood : colors.statusWarn
           }
           timestampText={`Last 30 days`}
           pendingTagText={
@@ -124,7 +122,7 @@ export default function HomeScreen() {
           title="Image Shield"
           value={`${protectedImagesCount} Protected`}
           icon="image"
-          statusColor="#2A2D35" // Neutral outline
+          statusColor={colors.neutral} // Neutral outline
           timestampText={`Last 30 days`}
           onPress={() => router.push("/(tabs)/shield")}
         />
@@ -133,10 +131,10 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
   },
   content: {
     padding: 20,
@@ -157,7 +155,7 @@ const styles = StyleSheet.create({
   fontFamily: THEME.fontFamily.dmSans,
   fontSize: 32,
   fontWeight: "700",
-  color: THEME.colors.textPrimary,
+  color: colors.textPrimary,
   letterSpacing: 0.5,
   },
 
@@ -165,12 +163,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     opacity: 0.8,
   },
   subheading: {
     marginTop: 4,
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
   },
@@ -178,4 +176,4 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 4,
   },
-});
+}));

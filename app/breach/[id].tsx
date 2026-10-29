@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, Text, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useBreachStore } from "../../src/stores/breachStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
+import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import type { BreachGuidance } from "../../src/types";
 
 function parseStoredGuidance(value?: string): BreachGuidance | null {
@@ -40,6 +41,8 @@ function parseStoredGuidance(value?: string): BreachGuidance | null {
 }
 
 export default function BreachDetailScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const breachStore = useBreachStore();
@@ -192,7 +195,7 @@ export default function BreachDetailScreen() {
   return (
     <ScrollView style={styles.container}>
       <Pressable style={({ pressed }) => [styles.backHeader, pressed && styles.pressedButton]} onPress={() => router.back()}>
-        <Feather name="arrow-left" size={22} color={THEME.colors.textPrimary} />
+        <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         <Text style={styles.backTitle}>Back</Text>
       </Pressable>
 
@@ -200,7 +203,7 @@ export default function BreachDetailScreen() {
         <Feather
           name={isSecured ? "check-circle" : "alert-triangle"}
           size={32}
-          color={isSecured ? THEME.colors.accent : THEME.colors.danger}
+          color={isSecured ? colors.accent : colors.danger}
           style={{marginBottom: 12}}
         />
         <Text style={styles.title}>{breach.name}</Text>
@@ -240,7 +243,7 @@ export default function BreachDetailScreen() {
       <View style={styles.guidanceCard}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#4ADE80" />
+            <ActivityIndicator size="large" color={colors.statusGood} />
             <Text style={styles.loadingText}>Generating AI recovery plan...</Text>
           </View>
         ) : guidanceError ? (
@@ -294,10 +297,10 @@ export default function BreachDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
     padding: 20,
     paddingTop: 56,
   },
@@ -310,19 +313,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: THEME.radius.pill,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   backTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: 15,
     fontFamily: THEME.fontFamily.dmSans,
     marginLeft: 8,
     fontWeight: "700",
   },
   headerCard: {
-    backgroundColor: THEME.colors.surface,
-    borderColor: `${THEME.colors.danger}88`,
+    backgroundColor: colors.surface,
+    borderColor: `${colors.danger}88`,
     borderWidth: 1,
     padding: 22,
     borderRadius: THEME.radius.lg,
@@ -335,24 +338,24 @@ const styles = StyleSheet.create({
     elevation: 7,
   },
   headerCardResolved: {
-    borderColor: `${THEME.colors.accent}88`,
-    backgroundColor: `${THEME.colors.accent}14`,
+    borderColor: `${colors.accent}88`,
+    backgroundColor: `${colors.accent}14`,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 24,
     fontWeight: "700",
     textAlign: "center",
   },
   date: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 14,
     marginTop: 8,
   },
   matchedCredential: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
     marginTop: 10,
@@ -364,32 +367,32 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   securedLabel: {
-    color: THEME.colors.accent,
+    color: colors.accent,
   },
   riskLabel: {
-    color: THEME.colors.danger,
+    color: colors.danger,
   },
   progressTrack: {
     marginTop: 10,
     width: "100%",
     height: 6,
     borderRadius: THEME.radius.pill,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.border,
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
     borderRadius: THEME.radius.pill,
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
   },
   progressText: {
     marginTop: 8,
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.h2,
     fontWeight: "700",
@@ -403,29 +406,29 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   dataClassTag: {
-    backgroundColor: `${THEME.colors.warning}20`,
-    borderColor: `${THEME.colors.warning}9A`,
+    backgroundColor: `${colors.warning}20`,
+    borderColor: `${colors.warning}9A`,
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: THEME.radius.pill,
   },
   dataClassText: {
-    color: THEME.colors.warning,
+    color: colors.warning,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
     fontWeight: "700",
   },
   body: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 15,
     lineHeight: 23,
     marginBottom: 24,
   },
   guidanceCard: {
-    backgroundColor: THEME.colors.surface,
-    borderColor: THEME.colors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: THEME.radius.lg,
     padding: 16,
@@ -437,19 +440,19 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   summaryCard: {
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: colors.faint,
     borderRadius: THEME.radius.md,
     padding: 14,
     gap: 8,
   },
   actionCard: {
-    backgroundColor: "rgba(255,255,255,0.03)",
+    backgroundColor: colors.faint,
     borderRadius: THEME.radius.md,
     padding: 14,
     gap: 10,
   },
   subsectionTitle: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     fontWeight: "700",
@@ -457,15 +460,15 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   guidanceText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 15,
     lineHeight: 23,
   },
   suggestionRow: {
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surfaceMuted,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: THEME.radius.md,
     padding: 12,
     gap: 10,
@@ -473,50 +476,50 @@ const styles = StyleSheet.create({
   doneButton: {
     alignSelf: "flex-start",
     borderWidth: 1,
-    borderColor: THEME.colors.accent,
+    borderColor: colors.accent,
     borderRadius: THEME.radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: `${THEME.colors.accent}1F`,
+    backgroundColor: `${colors.accent}1F`,
   },
   doneButtonCompleted: {
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surfaceMuted,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
   },
   doneButtonText: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     fontWeight: "700",
   },
   doneButtonTextCompleted: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
   },
   loadingContainer: {
     alignItems: "center",
     justifyContent: "center",
   },
   loadingText: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     marginTop: 12,
   },
   errorText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontSize: 18,
     marginBottom: 20,
   },
   backButton: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     padding: 12,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
   },
   backButtonText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
   },
   pressedButton: {
     transform: [{ scale: 0.985 }],
   },
-});
+}));

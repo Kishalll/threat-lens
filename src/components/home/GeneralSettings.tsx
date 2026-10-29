@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Keyboard, Pressable, Text, TextInput, View } from "react-native";
 
 import { THEME } from "../../constants/theme";
+import { makeStyles, useTheme } from "../../hooks/useTheme";
 import { canUseAppLock, unlock } from "../../services/appLock";
 import { clearAllAppData } from "../../services/dataReset";
 import { testNimKey } from "../../services/nimService";
@@ -11,7 +12,14 @@ import { useSettingsStore } from "../../stores/settingsStore";
 import { log } from "../../utils/activityLog";
 import { maskNimKey, type NimKeySource } from "../../utils/nimKey";
 import ConfirmDialog, { type ConfirmRequest } from "../settings/ConfirmDialog";
-import { SettingsNote, SettingsRow, SettingsSection, SettingsSwitch } from "../settings/SettingsControls";
+import { OptionPicker, SettingsNote, SettingsRow, SettingsSection, SettingsSwitch } from "../settings/SettingsControls";
+import type { ThemePreference } from "../../utils/settings";
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
+];
 
 type Status = { tone: "ok" | "error" | "warn"; text: string } | null;
 
@@ -22,6 +30,8 @@ const SOURCE_LABEL: Record<NimKeySource, string> = {
 };
 
 export default function GeneralSettings() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [source, setSource] = useState<NimKeySource | null>(null);
   const [savedKey, setSavedKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -30,6 +40,7 @@ export default function GeneralSettings() {
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [cleared, setCleared] = useState(false);
   const appLock = useSettingsStore((state) => state.settings.general.appLock);
+  const themePreference = useSettingsStore((state) => state.settings.general.theme);
   const updateSettings = useSettingsStore((state) => state.update);
   const [lockError, setLockError] = useState<string | null>(null);
 
@@ -123,8 +134,8 @@ export default function GeneralSettings() {
   };
 
   const statusColor =
-    status?.tone === "ok" ? THEME.colors.accent : status?.tone === "warn" ? THEME.colors.warning : THEME.colors.danger;
-  const sourceColor = source === "yours" ? THEME.colors.accent : source === "none" ? THEME.colors.danger : THEME.colors.textSecondary;
+    status?.tone === "ok" ? colors.accent : status?.tone === "warn" ? colors.warning : colors.danger;
+  const sourceColor = source === "yours" ? colors.accent : source === "none" ? colors.danger : colors.textSecondary;
 
   return (
     <>
@@ -134,7 +145,7 @@ export default function GeneralSettings() {
           label="Key in use"
           right={
             source === null ? (
-              <ActivityIndicator size="small" color={THEME.colors.accent} />
+              <ActivityIndicator size="small" color={colors.accent} />
             ) : (
               <Text style={[styles.source, { color: sourceColor }]}>{SOURCE_LABEL[source]}</Text>
             )
@@ -149,7 +160,7 @@ export default function GeneralSettings() {
               value={draft}
               onChangeText={setDraft}
               placeholder="nvapi-..."
-              placeholderTextColor={THEME.colors.textTertiary}
+              placeholderTextColor={colors.textTertiary}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="NVIDIA API key"
@@ -169,7 +180,7 @@ export default function GeneralSettings() {
                 onPress={remove}
                 disabled={busy}
               >
-                <Text style={[styles.buttonText, { color: THEME.colors.danger }]}>Remove</Text>
+                <Text style={[styles.buttonText, { color: colors.danger }]}>Remove</Text>
               </Pressable>
             ) : (
               <Pressable
@@ -183,7 +194,7 @@ export default function GeneralSettings() {
           </View>
           {busy ? (
             <View style={styles.statusRow}>
-              <ActivityIndicator size="small" color={THEME.colors.accent} />
+              <ActivityIndicator size="small" color={colors.accent} />
               <Text style={styles.statusText}>Checking with NVIDIA...</Text>
             </View>
           ) : status ? (
@@ -192,6 +203,17 @@ export default function GeneralSettings() {
         </View>
       </SettingsSection>
       <SettingsNote>Saved on this phone only. Used for every scan, even when the app is closed.</SettingsNote>
+
+      <SettingsSection title="Appearance">
+        <View style={styles.keyBody}>
+          <OptionPicker
+            options={THEME_OPTIONS}
+            value={themePreference}
+            onChange={(theme) => void updateSettings("general", { theme })}
+          />
+          <SettingsNote>System follows your phone's light or dark setting.</SettingsNote>
+        </View>
+      </SettingsSection>
 
       <SettingsSection title="Security">
         <SettingsSwitch
@@ -203,7 +225,7 @@ export default function GeneralSettings() {
         />
         {lockError ? (
           <View style={styles.lockError}>
-            <Text style={[styles.statusText, { color: THEME.colors.danger }]}>{lockError}</Text>
+            <Text style={[styles.statusText, { color: colors.danger }]}>{lockError}</Text>
           </View>
         ) : null}
       </SettingsSection>
@@ -215,9 +237,9 @@ export default function GeneralSettings() {
             onPress={clearAll}
             accessibilityRole="button"
           >
-            <Text style={[styles.buttonText, { color: THEME.colors.danger }]}>Clear all data</Text>
+            <Text style={[styles.buttonText, { color: colors.danger }]}>Clear all data</Text>
           </Pressable>
-          {cleared ? <Text style={[styles.statusText, { color: THEME.colors.accent }]}>All data cleared.</Text> : null}
+          {cleared ? <Text style={[styles.statusText, { color: colors.accent }]}>All data cleared.</Text> : null}
         </View>
       </SettingsSection>
 
@@ -226,7 +248,7 @@ export default function GeneralSettings() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   source: {
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
@@ -236,20 +258,20 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: THEME.colors.border,
+    borderTopColor: colors.border,
   },
   input: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
-    color: THEME.colors.textPrimary,
+    borderColor: colors.borderStrong,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 13,
   },
   masked: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 14,
   },
@@ -263,23 +285,23 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
+    borderColor: colors.borderStrong,
   },
   primaryButton: {
-    backgroundColor: THEME.colors.accent,
-    borderColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
   },
   dangerButton: {
-    borderColor: THEME.colors.danger,
+    borderColor: colors.danger,
   },
   buttonText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
     fontWeight: "700",
   },
   primaryText: {
-    color: "#0A0F14",
+    color: colors.onAccent,
   },
   statusRow: {
     flexDirection: "row",
@@ -287,7 +309,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.caption,
   },
@@ -301,4 +323,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-});
+}));

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useBreachStore } from "../../src/stores/breachStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
+import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import BreachSettings from "../../src/components/breach/BreachSettings";
 
@@ -86,6 +87,8 @@ function buildProgress(
 }
 
 export default function BreachScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const breachStore = useBreachStore();
   const suggestions = useDashboardStore((state) => state.suggestions);
@@ -233,13 +236,13 @@ export default function BreachScreen() {
         <TextInput
           style={[styles.input, inputError ? styles.inputErrorBorder : null]}
           placeholder="Add email or username to monitor"
-          placeholderTextColor="#8B8F99"
+          placeholderTextColor={colors.muted}
           value={newEmail}
           onChangeText={handleCredentialInputChange}
           autoCapitalize="none"
         />
         <Pressable style={styles.addButton} onPress={handleAddCredential}>
-          <Feather name="plus" size={22} color="#0A0F14" />
+          <Feather name="plus" size={22} color={colors.onAccent} />
         </Pressable>
       </View>
       {inputError ? <Text style={styles.inputErrorText}>{inputError}</Text> : null}
@@ -256,7 +259,7 @@ export default function BreachScreen() {
             <View key={cred.id} style={styles.credentialRow}>
               <Text style={styles.credentialText}>{cred.value}</Text>
               <Pressable onPress={() => breachStore.removeCredential(cred.id)}>
-                <Feather name="trash-2" size={20} color="#F87171" />
+                <Feather name="trash-2" size={20} color={colors.statusBad} />
               </Pressable>
             </View>
           ))
@@ -266,9 +269,9 @@ export default function BreachScreen() {
           <Text style={styles.sectionTitle}>Detected Breaches</Text>
           <Pressable onPress={() => breachStore.runScan()} disabled={breachStore.isScanning}>
              {breachStore.isScanning ? (
-                 <ActivityIndicator size="small" color={THEME.colors.accent} />
+                 <ActivityIndicator size="small" color={colors.accent} />
              ) : (
-                 <Feather name="refresh-cw" size={20} color={THEME.colors.accent} />
+                 <Feather name="refresh-cw" size={20} color={colors.accent} />
              )}
           </Pressable>
         </View>
@@ -339,7 +342,7 @@ export default function BreachScreen() {
                 <Feather
                   name={breachProgressById[breach.id]?.isSecured ? "check-circle" : "alert-triangle"}
                   size={20}
-                  color={breachProgressById[breach.id]?.isSecured ? THEME.colors.accent : THEME.colors.danger}
+                  color={breachProgressById[breach.id]?.isSecured ? colors.accent : colors.danger}
                   style={{ marginRight: 8 }}
                 />
                 <Text style={styles.breachName}>{breach.name}</Text>
@@ -406,10 +409,10 @@ export default function BreachScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
     padding: 20,
     paddingTop: 56,
   },
@@ -422,7 +425,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h1,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
@@ -434,16 +437,16 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    color: THEME.colors.textPrimary,
+    borderColor: colors.border,
+    color: colors.textPrimary,
     padding: 14,
     borderRadius: THEME.radius.md,
     fontFamily: THEME.fontFamily.dmSans,
   },
   addButton: {
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
     width: 48,
     borderRadius: THEME.radius.md,
     justifyContent: "center",
@@ -455,10 +458,10 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   inputErrorBorder: {
-    borderColor: THEME.colors.danger,
+    borderColor: colors.danger,
   },
   inputErrorText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     marginBottom: 12,
@@ -473,10 +476,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
+    borderBottomColor: colors.border,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h2,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
@@ -488,59 +491,59 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     borderRadius: THEME.radius.pill,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   filterChipActive: {
-    borderColor: `${THEME.colors.accent}88`,
-    backgroundColor: `${THEME.colors.accent}22`,
+    borderColor: `${colors.accent}88`,
+    backgroundColor: `${colors.accent}22`,
   },
   filterChipText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
   },
   filterChipTextActive: {
-    color: THEME.colors.accent,
+    color: colors.accent,
   },
   credentialRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     padding: 12,
     borderRadius: THEME.radius.md,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
   },
   credentialText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 14,
   },
   emptyText: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontStyle: "italic",
     marginBottom: 16,
   },
   safeText: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     marginTop: 8,
   },
   errorText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     marginTop: 8,
   },
   breachCard: {
-    backgroundColor: THEME.colors.surface,
-    borderColor: `${THEME.colors.danger}88`,
+    backgroundColor: colors.surface,
+    borderColor: `${colors.danger}88`,
     borderWidth: 1,
     padding: 18,
     borderRadius: THEME.radius.md,
@@ -552,8 +555,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   breachCardResolved: {
-    borderColor: `${THEME.colors.accent}88`,
-    backgroundColor: `${THEME.colors.accent}14`,
+    borderColor: `${colors.accent}88`,
+    backgroundColor: `${colors.accent}14`,
   },
   breachHeader: {
     flexDirection: "row",
@@ -561,25 +564,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   breachName: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 18,
     fontWeight: "700",
   },
   breachDate: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
     marginBottom: 4,
   },
   matchedCredentialText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
     marginBottom: 6,
   },
   breachDataTypes: {
-    color: THEME.colors.warning,
+    color: colors.warning,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
     marginBottom: 10,
@@ -591,31 +594,31 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   securedLabel: {
-    color: THEME.colors.accent,
+    color: colors.accent,
   },
   riskLabel: {
-    color: THEME.colors.danger,
+    color: colors.danger,
   },
   progressTrack: {
     height: 6,
     borderRadius: THEME.radius.pill,
-    backgroundColor: "rgba(255,255,255,0.12)",
+    backgroundColor: colors.border,
     overflow: "hidden",
     marginBottom: 6,
   },
   progressFill: {
     height: "100%",
     borderRadius: THEME.radius.pill,
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
   },
   progressText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     marginBottom: 10,
   },
   tapToView: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
     fontWeight: "700",
@@ -626,12 +629,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
   },
   remainingText: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 12,
     marginBottom: 10,
@@ -642,17 +645,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: THEME.radius.sm,
     borderWidth: 1,
-    borderColor: THEME.colors.accent,
-    backgroundColor: `${THEME.colors.accent}22`,
+    borderColor: colors.accent,
+    backgroundColor: `${colors.accent}22`,
   },
   viewMoreText: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
     fontSize: 13,
   },
   autoCollapseHint: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 11,
     marginTop: 8,
@@ -660,4 +663,4 @@ const styles = StyleSheet.create({
   pressedButton: {
     transform: [{ scale: 0.985 }],
   },
-});
+}));

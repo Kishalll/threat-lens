@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Pressable, Animated } from "react-native";
+import { View, Text, Pressable, Animated } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { THEME } from "../constants/theme";
+import { makeStyles, useTheme } from "../hooks/useTheme";
 
 interface Props {
   title: string;
@@ -24,6 +25,8 @@ export default function FeatureSummaryCard({
   badgeCount,
   pendingTagText,
 }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
 
@@ -54,9 +57,9 @@ export default function FeatureSummaryCard({
           styles.card,
           {
             borderColor:
-              statusColor !== "#2A2D35"
+              statusColor !== colors.neutral
                 ? `${statusColor}66`
-                : THEME.colors.border,
+                : colors.border,
             transform: [{ scale: pressed ? 0.985 : 1 }],
           },
         ]}
@@ -94,14 +97,14 @@ export default function FeatureSummaryCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     borderWidth: 1,
     borderRadius: THEME.radius.md,
     padding: 18,
     marginBottom: 14,
     width: "100%",
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.24,
@@ -125,10 +128,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 16,
     fontWeight: "700",
@@ -140,12 +143,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   value: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 16,
   },
   badge: {
-    backgroundColor: THEME.colors.danger,
+    backgroundColor: colors.danger,
     borderRadius: THEME.radius.pill,
     minWidth: 22,
     height: 22,
@@ -154,7 +157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   badgeText: {
-    color: "#0A0A0A",
+    color: colors.onAccent,
     fontSize: 12,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.jetbrainsMono,
@@ -162,29 +165,29 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.08)",
+    borderTopColor: colors.hairline,
     paddingTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   timestamp: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontSize: 12,
     fontFamily: THEME.fontFamily.dmSans,
   },
   pendingTag: {
     borderWidth: 1,
-    borderColor: `${THEME.colors.warning}99`,
-    backgroundColor: `${THEME.colors.warning}22`,
+    borderColor: `${colors.warning}99`,
+    backgroundColor: `${colors.warning}22`,
     borderRadius: THEME.radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   pendingTagText: {
-    color: THEME.colors.warning,
+    color: colors.warning,
     fontSize: 11,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.dmSans,
   },
-});
+}));

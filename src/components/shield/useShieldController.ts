@@ -18,7 +18,7 @@ import type {
   VerificationStatus,
 } from "../../types/imageTrust";
 import { getKey, setKey, PROTECTED_EXPORT_DIR_URI_KEY } from "../../services/secureKeyService";
-import { THEME } from "../../constants/theme";
+import type { ThemeColors } from "../../constants/theme";
 import { log } from "../../utils/activityLog";
 import type { ToastVariant } from "../../hooks/useToast";
 
@@ -37,32 +37,34 @@ interface ShieldDeviceSnapshot {
 
 const PROTECTED_ALBUM_NAME = "ThreatLens Protected";
 
-export const STATUS_META: Record<
-  VerificationStatus,
-  { label: string; color: string; icon: React.ComponentProps<typeof Feather>["name"] }
-> = {
-  AUTHENTIC: { label: "Authentic", color: THEME.colors.accent, icon: "check-circle" },
-  TAMPERED: { label: "Tampered", color: THEME.colors.danger, icon: "alert-triangle" },
-  INVALID_SIGNATURE: {
-    label: "Invalid Signature",
-    color: THEME.colors.danger,
-    icon: "x-octagon",
-  },
-  CLONE_APP: { label: "Clone App", color: THEME.colors.danger, icon: "slash" },
-  REVOKED: { label: "Revoked", color: THEME.colors.warning, icon: "shield-off" },
-  OFFLINE: { label: "Offline", color: THEME.colors.warning, icon: "wifi-off" },
-  NO_PROTECTION: {
-    label: "No Protection",
-    color: THEME.colors.textTertiary,
-    icon: "help-circle",
-  },
-  INTEGRITY_VERIFIED: {
-    label: "Intact (Offline)",
-    color: THEME.colors.warning,
-    icon: "check",
-  },
-  CORRUPT: { label: "Corrupt", color: THEME.colors.danger, icon: "alert-circle" },
-};
+// Verify result labels and colours, in the current theme's palette.
+export function statusMeta(
+  colors: ThemeColors
+): Record<VerificationStatus, { label: string; color: string; icon: React.ComponentProps<typeof Feather>["name"] }> {
+  return {
+    AUTHENTIC: { label: "Authentic", color: colors.accent, icon: "check-circle" },
+    TAMPERED: { label: "Tampered", color: colors.danger, icon: "alert-triangle" },
+    INVALID_SIGNATURE: {
+      label: "Invalid Signature",
+      color: colors.danger,
+      icon: "x-octagon",
+    },
+    CLONE_APP: { label: "Clone App", color: colors.danger, icon: "slash" },
+    REVOKED: { label: "Revoked", color: colors.warning, icon: "shield-off" },
+    OFFLINE: { label: "Offline", color: colors.warning, icon: "wifi-off" },
+    NO_PROTECTION: {
+      label: "No Protection",
+      color: colors.textTertiary,
+      icon: "help-circle",
+    },
+    INTEGRITY_VERIFIED: {
+      label: "Intact (Offline)",
+      color: colors.warning,
+      icon: "check",
+    },
+    CORRUPT: { label: "Corrupt", color: colors.danger, icon: "alert-circle" },
+  };
+}
 
 export function useShieldController(showToast: (msg: string, variant?: ToastVariant) => void) {
   const [mode, setMode] = useState<ShieldMode>("protect");

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Keyboard, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { THEME } from "../../constants/theme";
+import { makeStyles, useTheme } from "../../hooks/useTheme";
 
 interface SettingsModalProps {
   visible: boolean;
@@ -26,6 +27,8 @@ function useKeyboardHeight(): number {
 }
 
 export default function SettingsModal({ visible, title, onClose, children }: SettingsModalProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { height } = useWindowDimensions();
   const keyboardHeight = useKeyboardHeight();
   const available = height - keyboardHeight;
@@ -46,7 +49,7 @@ export default function SettingsModal({ visible, title, onClose, children }: Set
               accessibilityLabel="Close"
               hitSlop={8}
             >
-              <Feather name="x" size={18} color={THEME.colors.textSecondary} />
+              <Feather name="x" size={18} color={colors.textSecondary} />
             </Pressable>
           </View>
           {/* Keep the keyboard open when a button inside the card is tapped, so the
@@ -60,18 +63,18 @@ export default function SettingsModal({ visible, title, onClose, children }: Set
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    backgroundColor: colors.scrim,
     justifyContent: "center",
     padding: 20,
   },
   card: {
-    backgroundColor: THEME.colors.backgroundElevated,
+    backgroundColor: colors.backgroundElevated,
     borderRadius: THEME.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     overflow: "hidden",
   },
   header: {
@@ -82,10 +85,10 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: THEME.colors.border,
+    borderBottomColor: colors.border,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.h2,
     fontWeight: "700",
@@ -97,7 +100,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
   },
   pressed: {
     opacity: 0.7,
@@ -106,4 +109,4 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 18,
   },
-});
+}));

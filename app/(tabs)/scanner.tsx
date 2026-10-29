@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View, Text, TextInput, Pressable, ScrollView, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useScannerStore } from "../../src/stores/scannerStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
 import { THEME } from "../../src/constants/theme";
+import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import ScannerSettings from "../../src/components/scanner/ScannerSettings";
 
 export default function ScannerScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const router = useRouter();
   const { prefill } = useLocalSearchParams<{ prefill?: string | string[] }>();
   const scannerStore = useScannerStore();
@@ -92,12 +95,12 @@ export default function ScannerScreen() {
 
   const getStatusColor = (classification: string) => {
     switch (classification) {
-      case "SAFE": return THEME.colors.accent;
-      case "PROMO": return "#7BA7D0";
-      case "SCAM": return THEME.colors.danger;
-      case "PHISHING": return THEME.colors.danger;
-      case "UNAVAILABLE": return THEME.colors.textTertiary;
-      default: return THEME.colors.textTertiary;
+      case "SAFE": return colors.accent;
+      case "PROMO": return colors.promo;
+      case "SCAM": return colors.danger;
+      case "PHISHING": return colors.danger;
+      case "UNAVAILABLE": return colors.textTertiary;
+      default: return colors.textTertiary;
     }
   };
 
@@ -127,7 +130,7 @@ export default function ScannerScreen() {
           multiline
           numberOfLines={6}
           placeholder="Paste or type a message, email, or link here to analyze it for scams or phishing..."
-          placeholderTextColor="#8B8F99"
+          placeholderTextColor={colors.muted}
           value={textToScan}
           onChangeText={setTextToScan}
           textAlignVertical="top"
@@ -144,7 +147,7 @@ export default function ScannerScreen() {
           disabled={textToScan.trim().length === 0 || scannerStore.isScanning}
         >
           {scannerStore.isScanning ? (
-            <ActivityIndicator color="#0E0F11" />
+            <ActivityIndicator color={colors.onAccent} />
           ) : (
             <Text style={styles.scanButtonText}>Analyze Message</Text>
           )}
@@ -152,7 +155,7 @@ export default function ScannerScreen() {
 
         {scannerStore.isScanning ? (
           <Pressable style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]} onPress={scannerStore.cancelScan}>
-            <Feather name="x-circle" size={18} color={THEME.colors.danger} />
+            <Feather name="x-circle" size={18} color={colors.danger} />
             <Text style={styles.cancelButtonText}>Cancel Scan</Text>
           </Pressable>
         ) : null}
@@ -165,7 +168,7 @@ export default function ScannerScreen() {
               void handleScan(lastFailedInput);
             }}
           >
-            <Feather name="rotate-ccw" size={16} color={THEME.colors.textPrimary} />
+            <Feather name="rotate-ccw" size={16} color={colors.textPrimary} />
             <Text style={styles.retryButtonText}>Try Again</Text>
           </Pressable>
         ) : null}
@@ -213,10 +216,10 @@ export default function ScannerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
     padding: 20,
     paddingTop: 56,
   },
@@ -229,16 +232,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h1,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
   },
   inputContainer: {
     marginBottom: 22,
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     borderRadius: THEME.radius.lg,
     padding: 14,
     shadowColor: "#000",
@@ -248,10 +251,10 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   textInput: {
-    backgroundColor: "rgba(10, 14, 22, 0.68)",
-    borderColor: THEME.colors.border,
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.border,
     borderWidth: 1,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     padding: 16,
     borderRadius: THEME.radius.md,
     fontFamily: THEME.fontFamily.dmSans,
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   scanButton: {
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
     padding: 16,
     borderRadius: THEME.radius.md,
     alignItems: "center",
@@ -270,11 +273,14 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 5,
   },
+  // No shadow when disabled: it shows through the see-through fill as a box.
   disabledButton: {
-    backgroundColor: "rgba(131,208,174,0.45)",
+    backgroundColor: `${colors.accent}73`,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   scanButtonText: {
-    color: "#0A0F14",
+    color: colors.onAccent,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 15,
     fontWeight: "700",
@@ -284,7 +290,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: THEME.colors.danger,
+    borderColor: colors.danger,
     borderRadius: THEME.radius.md,
     padding: 12,
     alignItems: "center",
@@ -293,13 +299,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cancelButtonText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
     fontWeight: "700",
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h2,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
@@ -309,9 +315,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   historyCard: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     borderRadius: THEME.radius.md,
     padding: 16,
     marginBottom: 12,
@@ -339,46 +345,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   timestamp: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 10,
   },
   pendingTag: {
     borderWidth: 1,
-    borderColor: `${THEME.colors.warning}99`,
-    backgroundColor: `${THEME.colors.warning}22`,
+    borderColor: `${colors.warning}99`,
+    backgroundColor: `${colors.warning}22`,
     borderRadius: THEME.radius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
   pendingTagText: {
-    color: THEME.colors.warning,
+    color: colors.warning,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 10,
     fontWeight: "700",
   },
   previewText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
     lineHeight: 21,
   },
   emptyText: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontStyle: "italic",
   },
   errorText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     marginTop: 10,
   },
   retryButton: {
     marginTop: 10,
     alignSelf: "flex-start",
-    backgroundColor: THEME.colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
+    borderColor: colors.borderStrong,
     borderRadius: THEME.radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -387,7 +393,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   retryButtonText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
     fontWeight: "700",
@@ -395,4 +401,4 @@ const styles = StyleSheet.create({
   pressedButton: {
     transform: [{ scale: 0.985 }],
   },
-});
+}));

@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import AppLockGate from "../src/components/AppLockGate";
+import { ThemeProvider, makeStyles } from "../src/hooks/useTheme";
 
 import { parseThreatLensUrl } from "../src/services/deepLinkService";
 import { initDatabase } from "../src/services/storageService";
@@ -214,18 +215,27 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <AppLockGate>
-          <View style={styles.container}>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: styles.stackContent,
-              }}
-            />
-          </View>
-        </AppLockGate>
+        <ThemeProvider>
+          <AppLockGate>
+            <ThemedStack />
+          </AppLockGate>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function ThemedStack() {
+  const themed = useThemedStyles();
+  return (
+    <View style={themed.container}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: themed.stackContent,
+        }}
+      />
+    </View>
   );
 }
 
@@ -233,11 +243,14 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
   },
+});
+
+const useThemedStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
   },
   stackContent: {
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
   },
-});
+}));

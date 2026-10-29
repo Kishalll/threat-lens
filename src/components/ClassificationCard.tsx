@@ -1,29 +1,25 @@
 import Feather from "@expo/vector-icons/Feather";
 import type { ReactElement } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
-import { THEME } from "../constants/theme";
+import { THEME, type ThemeColors } from "../constants/theme";
+import { makeStyles, useTheme } from "../hooks/useTheme";
 import type { ScanResult } from "../types";
 
 type ClassificationCardProps = {
   result: ScanResult;
 };
 
-const CLASSIFICATION_COLORS: Record<ScanResult["classification"], string> = {
-  SAFE: "#83D0AE",
-  PROMO: "#7BA7D0",
-  SCAM: "#DC8C8C",
-  PHISHING: "#DC8C8C",
-  UNAVAILABLE: "#768196",
-};
-
-const CLASSIFICATION_BACKGROUNDS: Record<ScanResult["classification"], string> = {
-  SAFE: "rgba(131,208,174,0.14)",
-  PROMO: "rgba(123,167,208,0.14)",
-  SCAM: "rgba(220,140,140,0.14)",
-  PHISHING: "rgba(220,140,140,0.14)",
-  UNAVAILABLE: "rgba(118,129,150,0.14)",
-};
+// Same colour for the label and, at 14% opacity, the card tint.
+function classificationColor(colors: ThemeColors, classification: ScanResult["classification"]): string {
+  return {
+    SAFE: colors.accent,
+    PROMO: colors.promo,
+    SCAM: colors.danger,
+    PHISHING: colors.danger,
+    UNAVAILABLE: colors.textTertiary,
+  }[classification];
+}
 
 function getClassificationIcon(
   classification: ScanResult["classification"]
@@ -50,8 +46,10 @@ function getClassificationIcon(
 export default function ClassificationCard({
   result,
 }: ClassificationCardProps): ReactElement {
-  const accentColor = CLASSIFICATION_COLORS[result.classification];
-  const tintColor = CLASSIFICATION_BACKGROUNDS[result.classification];
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const accentColor = classificationColor(colors, result.classification);
+  const tintColor = `${accentColor}24`;
 
   return (
     <View
@@ -108,7 +106,7 @@ export default function ClassificationCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   card: {
     borderWidth: 1,
     borderRadius: THEME.radius.md,
@@ -139,12 +137,12 @@ const styles = StyleSheet.create({
   confidenceText: {
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 15,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
   },
   explanationText: {
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     lineHeight: 20,
   },
   sectionWrap: {
@@ -153,14 +151,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   listText: {
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 14,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     lineHeight: 20,
   },
-});
+}));

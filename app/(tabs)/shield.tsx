@@ -1,26 +1,23 @@
 import React from "react";
-import {
-  StyleSheet,
-  View,
-  Text,
-  Pressable,
-  ScrollView,
-} from "react-native";
+import { View, Text, Pressable, ScrollView } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import ProtectPanel from "../../src/components/shield/ProtectPanel";
 import SettingsPanel from "../../src/components/shield/SettingsPanel";
 import VerifyPanel from "../../src/components/shield/VerifyPanel";
 import {
-  STATUS_META,
+  statusMeta,
   type ShieldMode,
   useShieldController,
 } from "../../src/components/shield/useShieldController";
 import { useToast } from "../../src/hooks/useToast";
 import { THEME } from "../../src/constants/theme";
+import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 
 export default function ShieldScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { showToast, ToastComponent } = useToast();
   const {
@@ -135,7 +132,7 @@ export default function ShieldScreen() {
             verifyResult={verifyResult}
             verifyLoading={verifyLoading}
             verifyCloudCheck={verifyCloudCheck}
-            statusMeta={STATUS_META}
+            statusMeta={statusMeta(colors)}
             onReset={resetVerifyState}
             onPickImage={() => {
               void pickVerifyImage();
@@ -149,7 +146,7 @@ export default function ShieldScreen() {
 
         {errorMessage ? (
           <View style={styles.errorContainer}>
-            <Feather name="alert-circle" size={18} color={THEME.colors.danger} />
+            <Feather name="alert-circle" size={18} color={colors.danger} />
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         ) : null}
@@ -159,10 +156,10 @@ export default function ShieldScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     flex: 1,
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
     padding: 20,
     paddingTop: 56,
   },
@@ -175,13 +172,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h1,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
   },
   subtitle: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontSize: 14,
     fontFamily: THEME.fontFamily.dmSans,
     marginBottom: 16,
@@ -197,36 +194,36 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: THEME.radius.pill,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   modeChipActive: {
-    borderColor: `${THEME.colors.accent}AA`,
-    backgroundColor: `${THEME.colors.accent}1C`,
+    borderColor: `${colors.accent}AA`,
+    backgroundColor: `${colors.accent}1C`,
   },
   modeChipText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
     fontSize: 13,
   },
   modeChipTextActive: {
-    color: THEME.colors.accent,
+    color: colors.accent,
   },
   scroll: {
     flex: 1,
   },
   sectionTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: THEME.typography.h2,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
     marginBottom: 10,
   },
   card: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     borderRadius: THEME.radius.lg,
     padding: 14,
     marginBottom: 14,
@@ -240,15 +237,15 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     borderRadius: THEME.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
   },
   placeholderBox: {
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: THEME.colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
   },
   placeholderText: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     marginTop: 12,
     fontFamily: THEME.fontFamily.dmSans,
   },
@@ -264,16 +261,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   switchLabel: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
   },
   resultCard: {
     marginTop: 8,
     borderWidth: 1,
-    borderColor: THEME.colors.borderStrong,
+    borderColor: colors.borderStrong,
     borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
     padding: 12,
     gap: 6,
   },
@@ -289,26 +286,26 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   resultTitle: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 15,
     fontWeight: "700",
     marginBottom: 4,
   },
   resultLine: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
     lineHeight: 18,
   },
   detailLine: {
-    color: THEME.colors.textTertiary,
+    color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 12,
     lineHeight: 16,
   },
   inputLabel: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
     fontWeight: "700",
@@ -316,10 +313,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   input: {
-    backgroundColor: "rgba(10, 14, 22, 0.68)",
-    borderColor: THEME.colors.border,
+    backgroundColor: colors.inputBackground,
+    borderColor: colors.border,
     borderWidth: 1,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: THEME.radius.md,
@@ -332,7 +329,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   primaryButton: {
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -347,15 +344,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   primaryButtonText: {
-    color: "#0A0F14",
+    color: colors.onAccent,
     fontSize: 15,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.dmSans,
   },
   secondaryButton: {
-    backgroundColor: THEME.colors.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -365,15 +362,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   secondaryButtonText: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.dmSans,
   },
   cancelButton: {
-    backgroundColor: `${THEME.colors.danger}1F`,
+    backgroundColor: `${colors.danger}1F`,
     borderWidth: 1,
-    borderColor: `${THEME.colors.danger}8F`,
+    borderColor: `${colors.danger}8F`,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -383,7 +380,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cancelButtonText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontSize: 15,
     fontWeight: "700",
     fontFamily: THEME.fontFamily.dmSans,
@@ -393,7 +390,7 @@ const styles = StyleSheet.create({
   },
   outlineButton: {
     borderWidth: 1,
-    borderColor: `${THEME.colors.accent}9A`,
+    borderColor: `${colors.accent}9A`,
     borderRadius: THEME.radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -404,7 +401,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   outlineButtonText: {
-    color: THEME.colors.accent,
+    color: colors.accent,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "700",
     fontSize: 13,
@@ -413,7 +410,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -8,
     right: -8,
-    backgroundColor: THEME.colors.surfaceMuted,
+    backgroundColor: colors.surfaceMuted,
     borderRadius: 16,
     width: 32,
     height: 32,
@@ -424,15 +421,15 @@ const styles = StyleSheet.create({
   errorContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: `${THEME.colors.danger}1F`,
+    backgroundColor: `${colors.danger}1F`,
     padding: 14,
     borderRadius: THEME.radius.md,
     borderWidth: 1,
-    borderColor: `${THEME.colors.danger}8F`,
+    borderColor: `${colors.danger}8F`,
     marginBottom: 24,
   },
   errorText: {
-    color: THEME.colors.danger,
+    color: colors.danger,
     fontFamily: THEME.fontFamily.dmSans,
     fontWeight: "600",
     marginLeft: 8,
@@ -441,4 +438,4 @@ const styles = StyleSheet.create({
   pressedButton: {
     transform: [{ scale: 0.985 }],
   },
-});
+}));

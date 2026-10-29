@@ -1,15 +1,18 @@
 import React, { useEffect, useRef } from "react";
-import { View, Text, StyleSheet, Animated } from "react-native";
-import { getScoreColor } from "../utils/scoreCalculator";
+import { View, Text, Animated } from "react-native";
+import { scoreBand } from "../utils/scoreCalculator";
 import { THEME } from "../constants/theme";
+import { makeStyles, useTheme } from "../hooks/useTheme";
 
 interface Props {
   score: number;
 }
 
 export default function SafetyScoreBar({ score }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const animatedWidth = useRef(new Animated.Value(0)).current;
-  const color = getScoreColor(score);
+  const color = { good: colors.accent, warn: colors.warning, bad: colors.danger }[scoreBand(score)];
   const label = score >= 80 ? "Stable" : score >= 50 ? "Needs Attention" : "At Risk";
 
   useEffect(() => {
@@ -48,15 +51,15 @@ export default function SafetyScoreBar({ score }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   container: {
     marginTop: 8,
     marginBottom: 20,
     width: "100%",
     borderRadius: THEME.radius.lg,
     borderWidth: 1,
-    borderColor: THEME.colors.border,
-    backgroundColor: THEME.colors.surface,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 16,
@@ -71,7 +74,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   title: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: 13,
     letterSpacing: 1,
@@ -90,7 +93,7 @@ const styles = StyleSheet.create({
     lineHeight: 46,
   },
   outOfText: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.jetbrainsMono,
     fontSize: 17,
     marginBottom: 4,
@@ -103,14 +106,14 @@ const styles = StyleSheet.create({
   },
   barBackground: {
     height: 10,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: colors.hairline,
     borderRadius: 999,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    borderColor: colors.border,
   },
   barFill: {
     height: "100%",
     borderRadius: 999,
   },
-});
+}));

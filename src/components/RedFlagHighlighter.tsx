@@ -1,7 +1,8 @@
 import type { ReactElement } from "react";
-import { StyleSheet, Text } from "react-native";
+import { Text } from "react-native";
 
 import { THEME } from "../constants/theme";
+import { makeStyles } from "../hooks/useTheme";
 
 type RedFlagHighlighterProps = {
   text: string;
@@ -16,6 +17,7 @@ export default function RedFlagHighlighter({
   text,
   flags,
 }: RedFlagHighlighterProps): ReactElement {
+  const styles = useStyles();
   const normalizedFlags = Array.from(
     new Set(flags.map((flag) => flag.trim()).filter((flag) => flag.length > 0))
   );
@@ -57,14 +59,14 @@ export default function RedFlagHighlighter({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   baseText: {
     fontFamily: THEME.fontFamily.dmSans,
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontSize: 13,
     lineHeight: 18,
   },
   highlightedText: {
-    backgroundColor: "rgba(248,113,113,0.25)",
+    backgroundColor: `${colors.statusBad}40`,
   },
-});
+}));

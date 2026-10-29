@@ -122,8 +122,14 @@ export function calculateSafetyScore(inputs: ScoreInputs): number {
   return Math.round(clampScore(score));
 }
 
+export type ScoreBand = "good" | "warn" | "bad";
+
+export function scoreBand(score: number): ScoreBand {
+  if (score >= 80) return "good";
+  if (score >= 50) return "warn";
+  return "bad";
+}
+
 export function getScoreColor(score: number): string {
-  if (score >= 80) return "#83D0AE";
-  if (score >= 50) return "#D7AE78";
-  return "#DC8C8C";
+  return { good: "#83D0AE", warn: "#D7AE78", bad: "#DC8C8C" }[scoreBand(score)];
 }

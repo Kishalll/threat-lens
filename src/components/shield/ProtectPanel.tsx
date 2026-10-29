@@ -14,7 +14,7 @@ import { scheduleOnRN } from "react-native-worklets";
 import Feather from "@expo/vector-icons/Feather";
 
 import type { SignedImagePayload } from "../../types/imageTrust";
-import { THEME } from "../../constants/theme";
+import { useTheme } from "../../hooks/useTheme";
 
 interface ProtectPanelProps {
   styles: any;
@@ -41,6 +41,7 @@ export default function ProtectPanel({
   onSave,
   onCancel,
 }: ProtectPanelProps) {
+  const { colors } = useTheme();
   const isSigning = protectStep === "signing";
   const isCancelling = protectStep === "cancelling";
   const isBusy = isSigning || isCancelling;
@@ -72,13 +73,13 @@ export default function ProtectPanel({
           <Image source={{ uri: protectSourceUri }} style={styles.imageBox} />
         ) : (
           <View style={[styles.imageBox, styles.placeholderBox]}>
-            <Feather name="image" size={44} color={THEME.colors.textTertiary} />
+            <Feather name="image" size={44} color={colors.textTertiary} />
             <Text style={styles.placeholderText}>Select a photo to sign</Text>
           </View>
         )}
         {(protectSourceUri || signedImageUri) && !isBusy && (
           <TouchableOpacity style={styles.clearButton} onPress={onReset}>
-            <Feather name="x" size={20} color={THEME.colors.textPrimary} />
+            <Feather name="x" size={20} color={colors.textPrimary} />
           </TouchableOpacity>
         )}
       </View>
@@ -88,11 +89,11 @@ export default function ProtectPanel({
           <GestureDetector gesture={cancelTap}>
             <Animated.View style={styles.cancelButton} accessibilityRole="button">
               <Animated.View style={[local.row, cancelLabelStyle]}>
-                <Feather name="x" size={18} color={THEME.colors.danger} />
+                <Feather name="x" size={18} color={colors.danger} />
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </Animated.View>
               <Animated.View style={[StyleSheet.absoluteFill, local.row, cancellingStyle]}>
-                <ActivityIndicator size="small" color={THEME.colors.danger} />
+                <ActivityIndicator size="small" color={colors.danger} />
                 <Text style={styles.cancelButtonText}>Cancelling...</Text>
               </Animated.View>
             </Animated.View>
@@ -102,7 +103,7 @@ export default function ProtectPanel({
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
             onPress={onPickImage}
           >
-            <Feather name="upload" size={18} color={THEME.colors.textPrimary} />
+            <Feather name="upload" size={18} color={colors.textPrimary} />
             <Text style={styles.secondaryButtonText}>Select</Text>
           </Pressable>
         )}
@@ -117,10 +118,10 @@ export default function ProtectPanel({
           onPress={onProtect}
         >
           {isBusy ? (
-            <ActivityIndicator size="small" color="#0A0F14" />
+            <ActivityIndicator size="small" color={colors.onAccent} />
           ) : (
             <>
-              <Feather name="shield" size={18} color="#0A0F14" />
+              <Feather name="shield" size={18} color={colors.onAccent} />
               <Text style={styles.primaryButtonText}>Protect</Text>
             </>
           )}
@@ -138,7 +139,7 @@ export default function ProtectPanel({
             style={({ pressed }) => [styles.outlineButton, pressed && styles.pressedButton]}
             onPress={onSave}
           >
-            <Feather name="download" size={16} color={THEME.colors.accent} />
+            <Feather name="download" size={16} color={colors.accent} />
             <Text style={styles.outlineButtonText}>Save Signed Image</Text>
           </Pressable>
         </View>

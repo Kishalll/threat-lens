@@ -3,6 +3,7 @@ import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 
 import { THEME } from "../constants/theme";
+import { makeStyles, useTheme } from "../hooks/useTheme";
 import { unlock } from "../services/appLock";
 import { useSettingsStore } from "../stores/settingsStore";
 
@@ -10,6 +11,8 @@ import { useSettingsStore } from "../stores/settingsStore";
 const RELOCK_AFTER_MS = 30_000;
 
 export default function AppLockGate({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const hydrated = useSettingsStore((state) => state.hydrated);
   const appLock = useSettingsStore((state) => state.settings.general.appLock);
   const [locked, setLocked] = useState(false);
@@ -66,7 +69,7 @@ export default function AppLockGate({ children }: { children: React.ReactNode })
           {locked ? (
             <View style={styles.lockBody}>
               <View style={styles.iconWrap}>
-                <Feather name="lock" size={28} color={THEME.colors.accent} />
+                <Feather name="lock" size={28} color={colors.accent} />
               </View>
               <Text style={styles.title}>ThreatLens is locked</Text>
               <Text style={styles.subtitle}>Unlock with your fingerprint, face or phone PIN.</Text>
@@ -85,12 +88,12 @@ export default function AppLockGate({ children }: { children: React.ReactNode })
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   root: {
     flex: 1,
   },
   cover: {
-    backgroundColor: THEME.colors.background,
+    backgroundColor: colors.background,
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
@@ -105,17 +108,17 @@ const styles = StyleSheet.create({
     borderRadius: THEME.radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: `${THEME.colors.accent}22`,
+    backgroundColor: `${colors.accent}22`,
     marginBottom: 8,
   },
   title: {
-    color: THEME.colors.textPrimary,
+    color: colors.textPrimary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.h1,
     fontWeight: "700",
   },
   subtitle: {
-    color: THEME.colors.textSecondary,
+    color: colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.body,
     textAlign: "center",
@@ -125,10 +128,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 48,
     borderRadius: THEME.radius.md,
-    backgroundColor: THEME.colors.accent,
+    backgroundColor: colors.accent,
   },
   buttonText: {
-    color: "#0A0F14",
+    color: colors.onAccent,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.body,
     fontWeight: "700",
@@ -136,4 +139,4 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-});
+}));
