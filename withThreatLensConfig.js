@@ -608,7 +608,8 @@ class NotificationModule(
   fun showNotification(title: String, body: String, deepLink: String) {
     ensureChannel()
     val builder = NotificationCompat.Builder(reactContext, CHANNEL_ID)
-      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setSmallIcon(R.drawable.ic_stat_threatlens)
+      .setColor(0xFF83D0AE.toInt())
       .setContentTitle(title)
       .setContentText(body)
       .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -1185,7 +1186,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","conf
       }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     NotificationManagerCompat.from(applicationContext).notify(System.currentTimeMillis().toInt(),
       NotificationCompat.Builder(applicationContext, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setSmallIcon(R.drawable.ic_stat_threatlens).setColor(0xFF83D0AE.toInt())
         .setContentTitle(title).setContentText(body)
         .setPriority(NotificationCompat.PRIORITY_MAX)
         .setAutoCancel(true).setContentIntent(pi).build())
@@ -1212,6 +1213,18 @@ function withThreatLensNativeFiles(config) {
     const javaDir = path.join(projectRoot, 'android', 'app', 'src', 'main', 'java', ...packagePath);
 
     fs.mkdirSync(javaDir, { recursive: true });
+
+    // White notification icon (Android tints it), one per screen density.
+    const iconSourceDir = path.join(projectRoot, 'assets', 'notification-icon');
+    const resDir = path.join(projectRoot, 'android', 'app', 'src', 'main', 'res');
+    for (const density of fs.readdirSync(iconSourceDir)) {
+      const target = path.join(resDir, density);
+      fs.mkdirSync(target, { recursive: true });
+      fs.copyFileSync(
+        path.join(iconSourceDir, density, 'ic_stat_threatlens.png'),
+        path.join(target, 'ic_stat_threatlens.png')
+      );
+    }
 
     writeFileIfChanged(
       path.join(javaDir, 'NotificationService.kt'),
