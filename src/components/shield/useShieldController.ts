@@ -17,10 +17,7 @@ import type {
   VerificationResult,
   VerificationStatus,
 } from "../../types/imageTrust";
-import {
-  getKey,
-  setKey,
-} from "../../services/secureKeyService";
+import { getKey, setKey, PROTECTED_EXPORT_DIR_URI_KEY } from "../../services/secureKeyService";
 import { THEME } from "../../constants/theme";
 import { log } from "../../utils/activityLog";
 import type { ToastVariant } from "../../hooks/useToast";
@@ -39,7 +36,6 @@ interface ShieldDeviceSnapshot {
 }
 
 const PROTECTED_ALBUM_NAME = "ThreatLens Protected";
-const PROTECTED_EXPORT_DIR_URI_KEY = "THREATLENS_PROTECTED_EXPORT_DIR_URI";
 
 export const STATUS_META: Record<
   VerificationStatus,

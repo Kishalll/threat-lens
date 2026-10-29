@@ -49,7 +49,9 @@ export default function SettingsModal({ visible, title, onClose, children }: Set
               <Feather name="x" size={18} color={THEME.colors.textSecondary} />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          {/* Keep the keyboard open when a button inside the card is tapped, so the
+              tap is not spent closing it. Buttons close it themselves. */}
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
             {children}
           </ScrollView>
         </View>

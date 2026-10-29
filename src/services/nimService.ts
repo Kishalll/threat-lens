@@ -2,7 +2,7 @@ import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 import OpenAI from "openai";
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
-import { getKey } from "./secureKeyService";
+import { getActiveNimKey } from "./secureKeyService";
 import { applyClassificationGuardrails } from "./classificationGuardrails";
 import type { BreachGuidance, ScanResult } from "../types";
 
@@ -113,11 +113,10 @@ Rules: keep summary separate from action items. Use plain English. Prefer concre
 // NIM client
 // ---------------------------------------------------------------------------
 
-async function getNIMClient(): Promise<OpenAI> {
-  let apiKey = process.env.EXPO_PUBLIC_NIM_API_KEY;
-  if (!apiKey) apiKey = (await getKey("NIM_API_KEY")) ?? undefined;
+async function getNIMClient(overrideKey?: string): Promise<OpenAI> {
+  const apiKey = overrideKey ?? (await getActiveNimKey()).key;
   if (!apiKey) {
-    throw new Error("NIM_API_KEY not found. Please add EXPO_PUBLIC_NIM_API_KEY to your .env file.");
+    throw new Error("No NVIDIA API key. Add one in Home settings.");
   }
   return new OpenAI({
     baseURL: "https://integrate.api.nvidia.com/v1",
@@ -355,7 +354,7 @@ function fallbackScanResult(text: string, explanation: string): ScanResult {
 
 function getClassifyFallbackExplanation(error: unknown): string {
   if (isCompromisedOrInvalidKeyError(error)) {
-    return "NIM API key is invalid. Set a new EXPO_PUBLIC_NIM_API_KEY and restart the app.";
+    return "NVIDIA API key was rejected. Check it in Home settings.";
   }
   if (isQuotaOrRateLimitError(error)) {
     return "AI quota exceeded right now. Please retry shortly.";
@@ -394,6 +393,28 @@ function fallbackGuidanceFromText(text: string, isFallback: boolean): BreachGuid
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+export type NimKeyTestResult = "works" | "rejected" | "unreachable";
+
+// One tiny request to check a key before it is saved.
+export async function testNimKey(apiKey: string): Promise<NimKeyTestResult> {
+  try {
+    const client = await getNIMClient(apiKey.trim());
+    const body: ChatCompletionCreateParamsNonStreaming & { chat_template_kwargs: { enable_thinking: boolean } } = {
+      model: SCANNER_MODELS[0],
+      messages: [{ role: "user", content: "hi" }],
+      max_tokens: 1,
+      chat_template_kwargs: { enable_thinking: false },
+    };
+    await client.chat.completions.create(body);
+    return "works";
+  } catch (error) {
+    if (isCompromisedOrInvalidKeyError(error)) return "rejected";
+    // Rate limited means NVIDIA accepted the key; it is just busy.
+    if (error instanceof Error && error.message.includes("429")) return "works";
+    return "unreachable";
+  }
+}
 
 export async function classifyMessage(text: string): Promise<ScanResult> {
   try {

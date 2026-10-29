@@ -1,6 +1,9 @@
 import * as SecureStore from 'expo-secure-store';
+import { pickNimKey, type NimKeySource } from "../utils/nimKey";
 
 export const NIM_KEY_NAME = "NIM_API_KEY";
+export const USER_NIM_KEY_NAME = "NIM_USER_API_KEY";
+export const PROTECTED_EXPORT_DIR_URI_KEY = "THREATLENS_PROTECTED_EXPORT_DIR_URI";
 export const TRUST_REGISTRY_BASE_URL_KEY_NAME = "THREATLENS_TRUST_REGISTRY_BASE_URL";
 export const TRUST_REGISTRY_API_KEY_NAME = "THREATLENS_TRUST_REGISTRY_API_KEY";
 export const MASTER_PUBLIC_KEY_PEM_KEY_NAME = "THREATLENS_MASTER_PUBLIC_KEY_PEM";
@@ -45,6 +48,27 @@ export async function getKey(key: string): Promise<string | null> {
     console.error(`Failed to get key ${key}`, error);
     return null;
   }
+}
+
+async function readSecure(key: string): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(key);
+  } catch {
+    return null;
+  }
+}
+
+export async function getActiveNimKey(): Promise<{ key: string | null; source: NimKeySource }> {
+  const [user, legacy] = await Promise.all([readSecure(USER_NIM_KEY_NAME), readSecure(NIM_KEY_NAME)]);
+  return pickNimKey(user, process.env.EXPO_PUBLIC_NIM_API_KEY, legacy);
+}
+
+export async function saveUserNimKey(key: string): Promise<void> {
+  await SecureStore.setItemAsync(USER_NIM_KEY_NAME, key.trim());
+}
+
+export async function removeUserNimKey(): Promise<void> {
+  await SecureStore.deleteItemAsync(USER_NIM_KEY_NAME);
 }
 
 export async function getTrustRegistryBaseUrl(): Promise<string | null> {

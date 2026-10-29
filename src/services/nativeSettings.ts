@@ -1,5 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 import type { AppSettings } from "../utils/settings";
+import type { NimKeySource } from "../utils/nimKey";
+import { getActiveNimKey } from "./secureKeyService";
 
 export interface InstalledApp {
   packageName: string;
@@ -13,6 +15,15 @@ export function syncScannerSettingsToNative(scanner: AppSettings["scanner"]): vo
     return;
   }
   NativeModules.NotificationModule.setScannerSettings(JSON.stringify(scanner));
+}
+
+// The killed-app worker calls NVIDIA on its own, so it needs whichever key is in use.
+export async function syncNimKeyToNative(): Promise<NimKeySource> {
+  const { key, source } = await getActiveNimKey();
+  if (Platform.OS === "android" && NativeModules.NotificationModule?.storeNimKey) {
+    NativeModules.NotificationModule.storeNimKey(key ?? "");
+  }
+  return source;
 }
 
 export async function getInstalledApps(packages: string[]): Promise<InstalledApp[]> {

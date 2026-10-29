@@ -11,7 +11,7 @@ import SafetyScoreBar from "../../src/components/SafetyScoreBar";
 import FeatureSummaryCard from "../../src/components/FeatureSummaryCard";
 import { THEME } from "../../src/constants/theme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
-import { SettingsNote } from "../../src/components/settings/SettingsControls";
+import GeneralSettings from "../../src/components/home/GeneralSettings";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -72,7 +72,7 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <Text style={styles.appName}>ThreatLens</Text>
           <SettingsButton title="General settings">
-            <SettingsNote>Settings for this tab are coming next.</SettingsNote>
+            <GeneralSettings />
           </SettingsButton>
         </View>
         <Text style={styles.tagline}>

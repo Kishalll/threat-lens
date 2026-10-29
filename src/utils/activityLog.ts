@@ -15,6 +15,7 @@ const ICONS: Record<string, string> = {
   app_open: "🚀",
   dedup_skip: "♻️",
   alert_skipped: "🔕",
+  data_cleared: "🧹",
 };
 
 function ts(): string {

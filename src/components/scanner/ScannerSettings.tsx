@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { THEME } from "../../constants/theme";
 import { getInstalledApps, syncScannerSettingsToNative, type InstalledApp } from "../../services/nativeSettings";
@@ -89,6 +89,7 @@ export default function ScannerSettings() {
   };
 
   const saveCustom = (unit: RetentionUnit) => {
+    Keyboard.dismiss();
     const value = Number(customDraft);
     const limit = CUSTOM_RETENTION_LIMITS[unit];
     if (!Number.isInteger(value) || value < 1 || value > limit) {

@@ -299,6 +299,21 @@ export async function getScanResult(id: string): Promise<ScanResult | null> {
   return toScanResult(row as Record<string, unknown>);
 }
 
+// Everything the app has saved in its database, for "Clear all data".
+export async function clearAllTables(): Promise<void> {
+  await withDatabase((database) =>
+    database.execAsync(`
+      DELETE FROM scan_results;
+      DELETE FROM credentials;
+      DELETE FROM seen_breach_ids;
+      DELETE FROM watermark_log;
+      DELETE FROM acted_suggestions;
+      DELETE FROM breach_cache;
+      DELETE FROM app_settings;
+    `)
+  );
+}
+
 export async function deleteAllScanResults(): Promise<void> {
   await withDatabase((database) => database.runAsync("DELETE FROM scan_results"));
 }

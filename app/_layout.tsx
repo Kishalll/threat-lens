@@ -11,7 +11,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { parseThreatLensUrl } from "../src/services/deepLinkService";
 import { initDatabase } from "../src/services/storageService";
 import { syncBreachCheckTask } from "../src/services/backgroundTasks";
-import { syncScannerSettingsToNative } from "../src/services/nativeSettings";
+import { syncNimKeyToNative, syncScannerSettingsToNative } from "../src/services/nativeSettings";
 import {
   getInitialSharedText,
   initializeNotificationInterceptor,
@@ -20,7 +20,6 @@ import {
   openNotificationAccessSettings,
 } from "../src/modules/notificationBridge";
 import { requestNotificationPermissions, setupNotificationChannel } from "../src/services/notificationService";
-import { getKey } from "../src/services/secureKeyService";
 import { useBreachStore } from "../src/stores/breachStore";
 import { useScannerStore } from "../src/stores/scannerStore";
 import { useSettingsStore } from "../src/stores/settingsStore";
@@ -61,11 +60,8 @@ export default function RootLayout() {
     void (async () => {
       try {
         // Store NIM key in SharedPreferences so Kotlin worker can use it in killed state
-        const nimKey = await getKey("NIM_API_KEY");
-        if (nimKey && Platform.OS === "android" && NativeModules.NotificationModule?.storeNimKey) {
-          NativeModules.NotificationModule.storeNimKey(nimKey);
-          log("nim_key_stored", "Sent API key to background worker");
-        }
+        const keySource = await syncNimKeyToNative();
+        log("nim_key_stored", `Sent ${keySource} API key to background worker`);
         syncNativeAppActiveState(AppState.currentState === "active");
 
         await initDatabase();
