@@ -8,6 +8,8 @@ import { Alert, AppState, LogBox, NativeModules, Platform, StyleSheet, View } fr
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import AppLockGate from "../src/components/AppLockGate";
+
 import { parseThreatLensUrl } from "../src/services/deepLinkService";
 import { initDatabase } from "../src/services/storageService";
 import { syncBreachCheckTask } from "../src/services/backgroundTasks";
@@ -212,14 +214,16 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <View style={styles.container}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: styles.stackContent,
-            }}
-          />
-        </View>
+        <AppLockGate>
+          <View style={styles.container}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: styles.stackContent,
+              }}
+            />
+          </View>
+        </AppLockGate>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -2,14 +2,16 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { THEME } from "../../constants/theme";
+import { canUseAppLock, unlock } from "../../services/appLock";
 import { clearAllAppData } from "../../services/dataReset";
 import { testNimKey } from "../../services/nimService";
 import { syncNimKeyToNative } from "../../services/nativeSettings";
 import { getActiveNimKey, removeUserNimKey, saveUserNimKey } from "../../services/secureKeyService";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { log } from "../../utils/activityLog";
 import { maskNimKey, type NimKeySource } from "../../utils/nimKey";
 import ConfirmDialog, { type ConfirmRequest } from "../settings/ConfirmDialog";
-import { SettingsNote, SettingsRow, SettingsSection } from "../settings/SettingsControls";
+import { SettingsNote, SettingsRow, SettingsSection, SettingsSwitch } from "../settings/SettingsControls";
 
 type Status = { tone: "ok" | "error" | "warn"; text: string } | null;
 
@@ -27,6 +29,9 @@ export default function GeneralSettings() {
   const [status, setStatus] = useState<Status>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
   const [cleared, setCleared] = useState(false);
+  const appLock = useSettingsStore((state) => state.settings.general.appLock);
+  const updateSettings = useSettingsStore((state) => state.update);
+  const [lockError, setLockError] = useState<string | null>(null);
 
   const refresh = async () => {
     const active = await getActiveNimKey();
@@ -84,6 +89,20 @@ export default function GeneralSettings() {
         setStatus({ tone: "ok", text: "Removed. Scans use the built-in key again." });
       },
     });
+  };
+
+  // Both turning the lock on and off ask for an unlock first: on, so a broken
+  // setup can't lock you out; off, so someone holding your phone can't skip it.
+  const setAppLock = async (value: boolean) => {
+    setLockError(null);
+    if (value && !(await canUseAppLock())) {
+      setLockError("Set up a screen lock on your phone first.");
+      return;
+    }
+    if (!(await unlock(value ? "Turn on app lock" : "Turn off app lock"))) {
+      return;
+    }
+    await updateSettings("general", { appLock: value });
   };
 
   const clearAll = () => {
@@ -174,6 +193,21 @@ export default function GeneralSettings() {
       </SettingsSection>
       <SettingsNote>Saved on this phone only. Used for every scan, even when the app is closed.</SettingsNote>
 
+      <SettingsSection title="Security">
+        <SettingsSwitch
+          first
+          label="App lock"
+          description="Ask for fingerprint, face or PIN when you open the app or come back after 30 seconds"
+          value={appLock}
+          onValueChange={(value) => void setAppLock(value)}
+        />
+        {lockError ? (
+          <View style={styles.lockError}>
+            <Text style={[styles.statusText, { color: THEME.colors.danger }]}>{lockError}</Text>
+          </View>
+        ) : null}
+      </SettingsSection>
+
       <SettingsSection title="Data">
         <View style={styles.keyBody}>
           <Pressable
@@ -256,6 +290,10 @@ const styles = StyleSheet.create({
     color: THEME.colors.textSecondary,
     fontFamily: THEME.fontFamily.dmSans,
     fontSize: THEME.typography.caption,
+  },
+  lockError: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
   },
   pressed: {
     opacity: 0.7,
