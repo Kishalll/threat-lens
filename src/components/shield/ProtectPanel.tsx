@@ -1,12 +1,16 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import Feather from "@expo/vector-icons/Feather";
 
 import type { SignedImagePayload } from "../../types/imageTrust";
@@ -41,6 +45,24 @@ export default function ProtectPanel({
   const isCancelling = protectStep === "cancelling";
   const isBusy = isSigning || isCancelling;
 
+  // The JS thread is blocked while signing, so the cancel tap flips this on the
+  // UI thread and "Cancelling..." shows without waiting for JS.
+  const cancelTapped = useSharedValue(0);
+
+  useEffect(() => {
+    cancelTapped.value = isCancelling ? 1 : 0;
+  }, [protectStep]);
+
+  const cancelTap = Gesture.Tap()
+    .enabled(isSigning)
+    .onStart(() => {
+      cancelTapped.value = 1;
+      scheduleOnRN(onCancel);
+    });
+
+  const cancelLabelStyle = useAnimatedStyle(() => ({ opacity: 1 - cancelTapped.value }));
+  const cancellingStyle = useAnimatedStyle(() => ({ opacity: cancelTapped.value }));
+
   return (
     <View style={styles.card}>
       <View style={styles.imageContainer}>
@@ -62,19 +84,19 @@ export default function ProtectPanel({
       </View>
 
       <View style={styles.actionsRow}>
-        {isCancelling ? (
-          <View style={[styles.cancelButton, styles.disabledButton]}>
-            <ActivityIndicator size="small" color={THEME.colors.danger} />
-            <Text style={styles.cancelButtonText}>Cancelling...</Text>
-          </View>
-        ) : isSigning ? (
-          <Pressable
-            style={({ pressed }) => [styles.cancelButton, pressed && styles.pressedButton]}
-            onPress={onCancel}
-          >
-            <Feather name="x" size={18} color={THEME.colors.danger} />
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </Pressable>
+        {isBusy ? (
+          <GestureDetector gesture={cancelTap}>
+            <Animated.View style={styles.cancelButton} accessibilityRole="button">
+              <Animated.View style={[local.row, cancelLabelStyle]}>
+                <Feather name="x" size={18} color={THEME.colors.danger} />
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Animated.View>
+              <Animated.View style={[StyleSheet.absoluteFill, local.row, cancellingStyle]}>
+                <ActivityIndicator size="small" color={THEME.colors.danger} />
+                <Text style={styles.cancelButtonText}>Cancelling...</Text>
+              </Animated.View>
+            </Animated.View>
+          </GestureDetector>
         ) : (
           <Pressable
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressedButton]}
@@ -124,3 +146,12 @@ export default function ProtectPanel({
     </View>
   );
 }
+
+const local = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+});

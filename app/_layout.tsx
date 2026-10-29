@@ -5,6 +5,7 @@ import { useFonts } from "expo-font";
 import * as Linking from "expo-linking";
 import { useEffect } from "react";
 import { Alert, AppState, LogBox, NativeModules, Platform, StyleSheet, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { parseThreatLensUrl } from "../src/services/deepLinkService";
@@ -209,20 +210,25 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.container}>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: styles.stackContent,
-          }}
-        />
-      </View>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: styles.stackContent,
+            }}
+          />
+        </View>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: THEME.colors.background,
