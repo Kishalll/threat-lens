@@ -69,12 +69,12 @@ describe("dashboardDerived", () => {
       {
         id: "ok",
         timestamp: 1,
-        classification: "SPAM",
+        classification: "SCAM",
         confidence: 80,
-        messagePreview: "spam",
+        messagePreview: "scam",
         redFlags: [],
         suggestedActions: ["Block sender"],
-        explanation: "Spam",
+        explanation: "Scam",
       },
       {
         id: "unavailable",
@@ -89,7 +89,7 @@ describe("dashboardDerived", () => {
     ]);
 
     expect(result.scannedMessages).toEqual([
-      { id: "ok", riskType: "SPAM", totalSuggestions: 1, actedSuggestions: 0 },
+      { id: "ok", riskType: "SCAM", totalSuggestions: 1, actedSuggestions: 0 },
     ]);
     expect(result.suggestions).toEqual([
       expect.objectContaining({ sourceId: "ok", isFallback: false }),

@@ -3,22 +3,25 @@ import { v4 as uuidv4 } from "uuid";
 import OpenAI from "openai";
 import type { ChatCompletionCreateParamsNonStreaming } from "openai/resources/chat/completions";
 import { getKey } from "./secureKeyService";
+import { applyClassificationGuardrails } from "./classificationGuardrails";
 import type { BreachGuidance, ScanResult } from "../types";
 
 // ---------------------------------------------------------------------------
 // Model configuration
 // ---------------------------------------------------------------------------
 
+// Both are reasoning models; requests turn thinking off or the token budget
+// goes to reasoning and content comes back empty.
 // Scanner: needs strong multilingual + Indian-context classification accuracy
 const SCANNER_MODELS = [
-  "meta/llama-3.2-11b-vision-instruct",     // primary: fast, high quality multilingual and Indian context
-  "mistralai/mistral-nemotron",             // fallback
+  "nvidia/nemotron-3.5-lightning-30b-a3b",  // primary: ~1.3s per scan
+  "nvidia/nemotron-3.5-super-vl-120b-a12b", // fallback
 ];
 
 // Breach guidance: longer-form generation, lower latency preferable
 const BREACH_MODELS = [
-  "meta/llama-3.2-11b-vision-instruct",     // primary: reliable JSON output and guidance steps
-  "mistralai/mistral-nemotron",             // fallback
+  "nvidia/nemotron-3.5-lightning-30b-a3b",  // primary
+  "nvidia/nemotron-3.5-super-vl-120b-a12b", // fallback
 ];
 
 const MODEL_BACKOFF_DEFAULT_MS = 60_000;
@@ -30,59 +33,62 @@ const modelCooldownUntil = new Map<string, number>();
 // System prompts
 // ---------------------------------------------------------------------------
 
-const SCANNER_SYSTEM_PROMPT = `You are a cybersecurity expert for the Indian market. Classify messages as SAFE, PROMO, SPAM, SCAM, or PHISHING.
+const SCANNER_SYSTEM_PROMPT = `You are a cybersecurity expert for the Indian market. Classify messages as exactly one of SAFE, PROMO, SCAM, or PHISHING.
 You understand all Indian languages and code-mixed variants (Hinglish, Tanglish, etc.).
+Most messages people receive are harmless. Only flag a threat when the message itself shows one.
 
-DECISION TREE (follow top-to-bottom, first match wins):
+CATEGORIES (check top-to-bottom, first match wins):
 
-1. TRANSACTION ALERT -> SAFE
-   Reports a completed financial event: specific amount, masked account/card, transaction verb (debited/credited/paid/received/transferred). Standard footers (service charges link, copyright) do NOT change this. Key test: the message INFORMS about a completed event, it does NOT ask the user to take any auth or verification action.
+1. PHISHING
+   Tries to get credentials or account access: asks the user to share, enter or reply with an OTP, PIN, CVV, password, card or bank details. Links to "verify", "reactivate", "update KYC/PAN". Fake account urgency (suspended, blocked, expiring) pushing the user to a link. PHISHING tries to make you GIVE something.
 
-2. DELIVERY/SHIPMENT NOTIFICATION -> SAFE
-   Order dispatch, shipping status, or delivery updates from e-commerce/logistics (Amazon, Flipkart, Swiggy, Zomato, Delhivery, BlueDart, etc.). A delivery OTP (given TO the user for handing to the delivery person) is SAFE, not phishing.
+2. SCAM
+   Deception for money or action: impersonating police, CBI, customs, courier, electricity or telecom with threats ("digital arrest", disconnection tonight). Asks to call or WhatsApp a personal mobile number (not a helpline). Fake prizes, lottery, KBC, part-time jobs, investment or crypto returns, "sent money by mistake, please refund". SCAM tries to make you DO something (call, pay, transfer, install).
 
-3. INSTITUTION/GOVERNMENT -> SAFE
-   Informational from official bodies (TRAI, SEBI, RBI notices, UIDAI, .gov.in). No credential or payment request.
+3. PROMO
+   Marketing or offers: sales, discounts, recharge plans, cashback, new launches, app or service promotions. This includes bulk ads from unknown senders, as long as nothing deceptive is asked.
 
-4. PHISHING
-   Attempts to steal credentials. Asks user to share/enter OTP, PIN, CVV, password. Links to "verify", "reactivate", "update KYC". Creates fake account urgency (suspended/blocked/expiring). PHISHING tries to make you GIVE something (credentials, OTP).
-
-5. SCAM
-   Deception for profit. Impersonation of utilities/police/government with urgency. Directing to personal mobile numbers (not helplines). Fake prizes, lottery, job offers, investment schemes. Pressure to call/pay/transfer immediately. SCAM tries to make you DO something (call, pay, transfer).
-
-6. PROMO
-   Commercial marketing from recognizable brands (telecom, e-commerce, apps). No credential request, no deception.
-
-7. SPAM
-   Unsolicited bulk content from unknown/unidentifiable senders.
-
-8. SAFE
-   Personal conversation, greetings, casual chat.
+4. SAFE
+   Everything else, including:
+   - Bank, UPI and card alerts about a completed transaction (debited, credited, paid, received), even with footers or helpline numbers.
+   - OTPs sent TO the user, especially ones that warn "do not share". The warning is a sign the message is genuine.
+   - Delivery and order updates, delivery OTPs, bills, due date and renewal reminders from known services.
+   - Government or institution notices with no credential or payment request.
+   - Personal conversation, greetings, casual chat.
 
 RULES:
-- Financial keywords alone do NOT make a transaction alert suspicious.
-- A delivery OTP (provided to user for delivery verification) is NOT phishing.
-- Require concrete threat indicators for SCAM/PHISHING: credential request, impersonation with urgency, suspicious link with verification demand, or payment pressure to a personal number.
+- An unknown, short-code or business sender is NOT a threat by itself.
+- Financial keywords alone (OTP, debit, account, KYC mentioned in a warning) do NOT make a message suspicious.
+- SCAM/PHISHING need a concrete indicator: credential request, impersonation with urgency, a link with a verification demand, or payment pressure to a personal number.
+- If you are unsure between SAFE and PROMO, pick PROMO only if it is selling something.
 - For SAFE/PROMO: red_flags and suggested_actions MUST be empty arrays [].
 - For SCAM/PHISHING: suggested_actions must be specific and actionable (e.g. "Block this number", "Report to your bank", "Do not click the link", "File complaint at cybercrime.gov.in"). Avoid generic advice.
 - confidence should reflect how certain you are (0-100). Use 80+ for clear-cut cases, 50-79 for ambiguous ones.
 
+EXAMPLES:
+- "482913 is your OTP for Rs 2,499 at Amazon on HDFC Bank card XX1234. Never share your OTP with anyone." -> SAFE
+- "Rs 500.00 debited from A/c XX4521 to VPA abc@okicici. UPI Ref 61234. Not you? Call 18001234567" -> SAFE
+- "Flat 60% off on sneakers this weekend only! Shop now at myntra.com. T&C apply" -> PROMO
+- "Your SBI account will be blocked today. Update your PAN here: bit.ly/sbi-kyc-upd" -> PHISHING
+- "Dear consumer, your electricity will be disconnected tonight. Call officer 9876543210 immediately" -> SCAM
+- "Part time job! Earn Rs 5000 daily from home. WhatsApp 8123456789 now" -> SCAM
+
 Respond ONLY with valid JSON. Schema:
 {
-  "classification": "SAFE|PROMO|SPAM|SCAM|PHISHING",
+  "classification": "SAFE|PROMO|SCAM|PHISHING",
   "confidence": 0-100,
   "explanation": "1-3 sentences, plain English",
   "red_flags": ["specific suspicious element"],
   "suggested_actions": ["specific actionable step"]
 }`;
 
-// JSON schema for NIM's guided_json (grammar-constrained output)
+// JSON schema sent as response_format (grammar-constrained output)
 const SCANNER_JSON_SCHEMA = {
   type: "object" as const,
   properties: {
     classification: {
       type: "string" as const,
-      enum: ["SAFE", "PROMO", "SPAM", "SCAM", "PHISHING"],
+      enum: ["SAFE", "PROMO", "SCAM", "PHISHING"],
     },
     confidence: { type: "number" as const },
     explanation: { type: "string" as const },
@@ -102,58 +108,6 @@ Schema:
 }
 
 Rules: keep summary separate from action items. Use plain English. Prefer concrete steps the user can do right now.`;
-
-// ---------------------------------------------------------------------------
-// Guardrail patterns
-// ---------------------------------------------------------------------------
-
-// Genuine threat indicators (always suspicious regardless of context)
-// NOTE: Does NOT include bare "otp" -- delivery OTPs are legitimate.
-// Only matches OTP in a credential-harvesting context (share/enter/send your OTP).
-const GENUINE_THREAT_PATTERNS: RegExp[] = [
-  /bit\.ly|tinyurl|t\.co|shorturl|goo\.gl|is\.gd|cutt\.ly/i,
-  /(?:share|send|enter|provide|give)\s+(?:your|ur|the)?\s*(?:otp|one[-\s]?time\s?password)/i,
-  /kyc|verify\s+account|account\s+suspended|reactivate/i,
-  /\bcvv\b|\bpin\b|\bpassword\b/i,
-  /lottery|prize|winner|gift\s?card/i,
-  // Impersonation scam: urgency words + personal Indian mobile number
-  /\b(?:immediately|tonight|urgent|disconnect|blocked|arrested|legal\s*action)\b/i,
-];
-
-// Patterns that identify a transactional alert (bank/UPI/institution payment notification)
-const TRANSACTIONAL_ALERT_PATTERNS: RegExp[] = [
-  /(?:rs\.?|inr|₹)\s*[\d,]+(?:\.\d{1,2})?/i,                       // monetary amount
-  /(?:a\/c|account|card)\s*(?:no\.?\s*)?(?:ending|[xX*]+)\s*\d{3,}/i, // masked account/card
-  /ending\s+\d{4}/i,                                                  // card ending XXXX
-  /\b(?:debited|credited|received|transferred|paid|successful)\b/i,   // transaction verbs
-  /\b(?:ref|reference|txn|neft|imps|rtgs|upi\s*ref)\b/i,              // reference patterns
-];
-
-// Patterns that identify a delivery/shipment notification
-const DELIVERY_NOTIFICATION_PATTERNS: RegExp[] = [
-  /\b(?:delivered|dispatched|shipped|out for delivery|arriving|in transit)\b/i,
-  /\b(?:order|package|parcel|shipment)\b.*\b(?:id|no|number|#)\b/i,
-  /\bdelivery\s*otp\b/i,
-  /\b(?:amazon|flipkart|myntra|swiggy|zomato|delhivery|bluedart|ekart|ecom\s*express)\b/i,
-];
-
-// Patterns that indicate credential harvesting (true threat in financial context)
-const CREDENTIAL_REQUEST_PATTERNS: RegExp[] = [
-  /share\s+(your|ur)\b/i,
-  /enter\s+(your|ur)\b/i,
-  /\b(?:verify|update|confirm|reactivate)\s+(?:your|ur)?\s*(?:account|kyc|identity|details)\b/i,
-  /\b(?:suspended|blocked|deactivated|frozen)\b.*\b(?:click|tap|call|contact|visit)\b/i,
-  /\b(?:click|tap)\b.*\b(?:verify|reactivate|update|confirm|unblock)\b/i,
-];
-
-const CASUAL_SAFE_PATTERNS: RegExp[] = [
-  /^(hi|hii|hello|hey|yo)[!.\s]*$/i,
-  /^how are you[?.!\s]*$/i,
-  /^are you free[?.!\s]*$/i,
-  /^(come|let'?s)\s+(to\s+)?play[!.\s]*$/i,
-  /^let'?s\s+meet[!.\s]*$/i,
-  /^good\s+(morning|afternoon|evening|night)[!.\s]*$/i,
-];
 
 // ---------------------------------------------------------------------------
 // NIM client
@@ -269,7 +223,7 @@ async function generateWithNIM(
   userContent: string,
   candidates: string[],
   maxTokens: number,
-  guidedJsonSchema?: Record<string, unknown>,
+  jsonSchema?: Record<string, unknown>,
 ): Promise<string> {
   const client = await getNIMClient();
   let lastError: unknown = null;
@@ -279,7 +233,10 @@ async function generateWithNIM(
   for (const model of getAvailableModels(candidates)) {
     if ((modelCooldownUntil.get(model) ?? 0) > now) { skipped++; continue; }
     try {
-      const baseBody: ChatCompletionCreateParamsNonStreaming = {
+      // chat_template_kwargs isn't in the SDK types; the SDK sends it through as-is.
+      const baseBody: ChatCompletionCreateParamsNonStreaming & {
+        chat_template_kwargs: { enable_thinking: boolean };
+      } = {
         model,
         messages: [
           { role: "system", content: systemPrompt },
@@ -288,24 +245,24 @@ async function generateWithNIM(
         temperature: 0.1,
         top_p: 0.7,
         max_tokens: maxTokens,
+        chat_template_kwargs: { enable_thinking: false },
       };
 
-      // Try with guided_json first for grammar-constrained JSON output.
+      // Try with a JSON schema first for grammar-constrained output.
       // If the model doesn't support it, fall back to prompt-only JSON.
-      if (guidedJsonSchema) {
+      if (jsonSchema) {
         try {
-          const guidedBody = { ...baseBody };
-          (guidedBody as unknown as Record<string, unknown>).extra_body = {
-            nvext: { guided_json: guidedJsonSchema },
-          };
-          const resp = await client.chat.completions.create(guidedBody);
+          const resp = await client.chat.completions.create({
+            ...baseBody,
+            response_format: { type: "json_schema", json_schema: { name: "result", schema: jsonSchema } },
+          });
           return resp.choices[0]?.message?.content ?? "";
-        } catch (guidedError) {
-          // If the model rejects guided_json (400/unsupported), retry without it
-          const isUnsupported = guidedError instanceof Error &&
-            (guidedError.message.includes("400") || guidedError.message.toLowerCase().includes("unsupported"));
-          if (!isUnsupported) throw guidedError;
-          console.warn(`[NIM] guided_json not supported by ${model}, retrying without it`);
+        } catch (schemaError) {
+          // If the model rejects the schema (400/unsupported), retry without it
+          const isUnsupported = schemaError instanceof Error &&
+            (schemaError.message.includes("400") || schemaError.message.toLowerCase().includes("unsupported"));
+          if (!isUnsupported) throw schemaError;
+          console.warn(`[NIM] json_schema not supported by ${model}, retrying without it`);
         }
       }
 
@@ -359,7 +316,7 @@ function parseNIMJsonResponse(rawText: string): Record<string, unknown> {
 
 function normalizeClassification(value: unknown): ScanResult["classification"] {
   if (
-    value === "SAFE" || value === "PROMO" || value === "SPAM" ||
+    value === "SAFE" || value === "PROMO" ||
     value === "SCAM" || value === "PHISHING"
   ) return value;
   return "SAFE";
@@ -377,121 +334,6 @@ function normalizeGuidanceItems(value: unknown): string[] {
     .filter((i): i is string => typeof i === "string")
     .map((i) => i.trim())
     .filter((i) => i.length > 0);
-}
-
-function normalizeMessageText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-// ---------------------------------------------------------------------------
-// Guardrails
-// ---------------------------------------------------------------------------
-
-function countGenuineThreats(text: string): number {
-  return GENUINE_THREAT_PATTERNS.filter((p) => p.test(text)).length;
-}
-
-function countTransactionalSignals(text: string): number {
-  return TRANSACTIONAL_ALERT_PATTERNS.filter((p) => p.test(text)).length;
-}
-
-function hasCredentialRequest(text: string): boolean {
-  return CREDENTIAL_REQUEST_PATTERNS.some((p) => p.test(text));
-}
-
-function isLikelyCasualSafeMessage(text: string): boolean {
-  const normalized = normalizeMessageText(text);
-  if (!normalized || normalized.split(" ").filter(Boolean).length > 7) return false;
-  return CASUAL_SAFE_PATTERNS.some((p) => p.test(normalized));
-}
-
-function countDeliverySignals(text: string): number {
-  return DELIVERY_NOTIFICATION_PATTERNS.filter((p) => p.test(text)).length;
-}
-
-function isLikelyTransactionalAlert(text: string): boolean {
-  // Needs at least 2 transactional signals (e.g. amount + masked account,
-  // or amount + transaction verb) and no credential harvesting attempt.
-  return countTransactionalSignals(text) >= 2 && !hasCredentialRequest(text);
-}
-
-function isLikelyDeliveryNotification(text: string): boolean {
-  // Needs at least 2 delivery signals (e.g. "delivered" + brand name,
-  // or "out for delivery" + order number) and no credential harvesting.
-  return countDeliverySignals(text) >= 2 && !hasCredentialRequest(text);
-}
-
-function applyClassificationGuardrails(text: string, result: ScanResult): ScanResult {
-  const normalized = normalizeMessageText(text);
-  const threats = countGenuineThreats(normalized);
-  const casual = isLikelyCasualSafeMessage(normalized);
-
-  // 1. Short casual messages with no threats are always safe
-  if (casual && threats === 0 && result.classification !== "SAFE") {
-    return {
-      ...result,
-      classification: "SAFE",
-      confidence: Math.max(75, result.confidence),
-      redFlags: [],
-      suggestedActions: [],
-      explanation: "Likely normal conversation with no clear scam indicators.",
-    };
-  }
-
-  // 2. Transaction alert protection: if the message structurally looks like
-  //    a bank/UPI/institution payment notification and has no credential
-  //    harvesting, override wrong classifications back to SAFE.
-  if (
-    isLikelyTransactionalAlert(normalized) &&
-    (result.classification === "SPAM" || result.classification === "SCAM" || result.classification === "PHISHING")
-  ) {
-    return {
-      ...result,
-      classification: "SAFE",
-      confidence: Math.max(80, result.confidence),
-      redFlags: [],
-      suggestedActions: [],
-      explanation: "Transaction alert from a financial institution or service.",
-    };
-  }
-
-  // 2b. Delivery notification protection: e-commerce/logistics delivery updates
-  //     with no credential harvesting should not be flagged.
-  if (
-    isLikelyDeliveryNotification(normalized) &&
-    (result.classification === "SPAM" || result.classification === "SCAM" || result.classification === "PHISHING")
-  ) {
-    return {
-      ...result,
-      classification: "SAFE",
-      confidence: Math.max(80, result.confidence),
-      redFlags: [],
-      suggestedActions: [],
-      explanation: "Delivery or shipment notification from a logistics/e-commerce service.",
-    };
-  }
-
-  // 3. If no genuine threat patterns exist but LLM flagged SCAM/PHISHING,
-  //    downgrade to SPAM but keep the LLM's original action items.
-  if (threats === 0 && (result.classification === "SCAM" || result.classification === "PHISHING")) {
-    return {
-      ...result,
-      classification: "SPAM",
-      confidence: Math.min(result.confidence, 55),
-      redFlags: [],
-      explanation: "No strong phishing or scam signals detected.",
-      suggestedActions: result.suggestedActions.length > 0
-        ? result.suggestedActions
-        : ["Treat with caution if sender is unknown."],
-    };
-  }
-
-  // 4. SAFE and PROMO results should never carry red flags or actions
-  if (result.classification === "SAFE" || result.classification === "PROMO") {
-    return { ...result, redFlags: [], suggestedActions: [] };
-  }
-
-  return result;
 }
 
 // ---------------------------------------------------------------------------

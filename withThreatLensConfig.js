@@ -755,9 +755,10 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
     private const val NIM_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
     private const val DEBUG_TAG = "ThreatLensNotif"
     private const val WORKER_DEDUP_WINDOW_MS = 120_000L
+    // Reasoning models: requests turn thinking off so the answer isn't empty.
     private val NIM_MODELS = listOf(
-      "meta/llama-3.3-70b-instruct",
-      "nv-mistralai/mistral-nemo-12b-instruct"
+      "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "nvidia/nemotron-3.5-super-vl-120b-a12b"
     )
     private val recentWorkerFingerprints = mutableMapOf<String, Long>()
     private val LOW_SIGNAL_PATTERNS = listOf(
@@ -810,10 +811,13 @@ class NotificationWorker(context: Context, params: WorkerParameters) : Worker(co
     private val THREAT_KW = Regex("""(?i)kyc|otp|cvv|pin|password|lottery|prize|winner|verify|suspend|block|arrest|urgent|click here|tap here|http""")
     private val SHORT_MSG = Regex("""^[^\\d\\n]{0,60}$""")
     private val SYSTEM_PROMPT = """
-You are a cybersecurity expert for the Indian market. Classify messages as SAFE, PROMO, SPAM, SCAM, or PHISHING.
-DECISION TREE: 1.TRANSACTION ALERT->SAFE 2.DELIVERY->SAFE 3.INSTITUTION->SAFE 4.PHISHING 5.SCAM 6.PROMO 7.SPAM 8.SAFE
-RULES: Financial keywords alone do NOT make a transaction alert suspicious. SAFE/PROMO: red_flags and suggested_actions=[]. confidence 0-100.
-Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SPAM|SCAM|PHISHING","confidence":0-100,"explanation":"1-3 sentences","red_flags":[],"suggested_actions":[]}
+You are a cybersecurity expert for the Indian market. Classify messages as exactly one of SAFE, PROMO, SCAM, or PHISHING. Most messages are harmless.
+PHISHING: asks to share/enter OTP, PIN, CVV, password or card details, or links to verify/reactivate/update KYC.
+SCAM: impersonation with threats (police, electricity, courier), personal mobile numbers, fake prizes, jobs, investments, refund-by-mistake requests.
+PROMO: marketing, offers, sales, recharge plans, even from unknown senders.
+SAFE: everything else, incl. bank/UPI transaction alerts, OTPs sent to the user (a "do not share" warning means genuine), deliveries, bills, personal chat.
+RULES: An unknown or short-code sender is not a threat by itself. Financial keywords alone do NOT make a message suspicious. SAFE/PROMO: red_flags and suggested_actions=[]. confidence 0-100.
+Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SCAM|PHISHING","confidence":0-100,"explanation":"1-3 sentences","red_flags":[],"suggested_actions":[]}
     """.trimIndent()
   }
 
@@ -983,6 +987,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SPAM|SCAM|PHISHING",
       try {
         val body = JSONObject().apply {
           put("model", model); put("temperature", 0.1); put("max_tokens", 400)
+          put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
           put("messages", JSONArray().apply {
             put(JSONObject().apply { put("role","system"); put("content", SYSTEM_PROMPT) })
             put(JSONObject().apply { put("role","user"); put("content","Message to classify:\\n\$text") })
@@ -1014,7 +1019,7 @@ Respond ONLY with valid JSON: {"classification":"SAFE|PROMO|SPAM|SCAM|PHISHING",
     }
     val o = JSONObject(s)
     val cls = when (o.optString("classification","SAFE").uppercase()) {
-      "PROMO","SPAM","SCAM","PHISHING" -> o.getString("classification").uppercase()
+      "PROMO","SCAM","PHISHING" -> o.getString("classification").uppercase()
       else -> "SAFE"
     }
     fun arr(k: String) = mutableListOf<String>().apply {

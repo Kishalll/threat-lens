@@ -96,8 +96,6 @@ export default function ScanResultScreen() {
     ? "#8B8F99"
     : isDangerous
     ? "#F87171"
-    : record.classification === "SPAM"
-    ? "#FBBF24"
     : record.classification === "PROMO"
     ? "#7BA7D0"
     : "#4ADE80";
@@ -105,8 +103,6 @@ export default function ScanResultScreen() {
     ? "slash"
     : isDangerous
     ? "alert-octagon"
-    : record.classification === "SPAM"
-    ? "info"
     : record.classification === "PROMO"
     ? "tag"
     : "shield";

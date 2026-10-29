@@ -5,7 +5,7 @@ import { useScannerStore } from "../stores/scannerStore";
 import { log } from "../utils/activityLog";
 import type { ScanResult } from "../types";
 
-const DANGEROUS = new Set(["SPAM", "SCAM", "PHISHING"]);
+const DANGEROUS = new Set(["SCAM", "PHISHING"]);
 
 const ALLOWED_PACKAGES = new Set([
   "com.whatsapp", "com.whatsapp.w4b",

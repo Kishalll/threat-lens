@@ -12,7 +12,6 @@ type ClassificationCardProps = {
 const CLASSIFICATION_COLORS: Record<ScanResult["classification"], string> = {
   SAFE: "#83D0AE",
   PROMO: "#7BA7D0",
-  SPAM: "#D7AE78",
   SCAM: "#DC8C8C",
   PHISHING: "#DC8C8C",
   UNAVAILABLE: "#768196",
@@ -21,7 +20,6 @@ const CLASSIFICATION_COLORS: Record<ScanResult["classification"], string> = {
 const CLASSIFICATION_BACKGROUNDS: Record<ScanResult["classification"], string> = {
   SAFE: "rgba(131,208,174,0.14)",
   PROMO: "rgba(123,167,208,0.14)",
-  SPAM: "rgba(215,174,120,0.14)",
   SCAM: "rgba(220,140,140,0.14)",
   PHISHING: "rgba(220,140,140,0.14)",
   UNAVAILABLE: "rgba(118,129,150,0.14)",

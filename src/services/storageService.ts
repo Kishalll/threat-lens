@@ -82,6 +82,8 @@ async function openAndInitializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   `).catch(() => {
     // Column already exists on upgraded installs.
   });
+  // SPAM was dropped as a category; clear old results that used it.
+  await openedDb.execAsync(`DELETE FROM scan_results WHERE classification = 'SPAM';`);
   return openedDb;
 }
 

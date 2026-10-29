@@ -12,7 +12,7 @@ const { NotificationModule } = NativeModules;
 // not at module parse time.
 export let notificationEmitter: NativeEventEmitter | null = null;
 
-const DANGEROUS_CLASSIFICATIONS = new Set(["SPAM", "SCAM", "PHISHING"]);
+const DANGEROUS_CLASSIFICATIONS = new Set(["SCAM", "PHISHING"]);
 const PROMO_CLASSIFICATION = "PROMO";
 let interceptorRegistered = false;
 
