@@ -137,3 +137,38 @@ describe("dashboardStore hydrateScanHistory", () => {
     ]);
   });
 });
+
+describe("dashboardStore saved ticks across a restart", () => {
+  it("saves a new scan's tick under a stable id that history finds again", async () => {
+    useDashboardStore.getState().registerSuggestions("scan", "s9", ["Block the sender"]);
+    const [suggestion] = useDashboardStore.getState().suggestions;
+    expect(suggestion.id).toBe("scan-s9-0");
+
+    useDashboardStore.getState().markSuggestionAsDone("scan-s9-0");
+    expect(mockInsertActedSuggestion).toHaveBeenCalledWith("scan-s9-0");
+
+    // Restart: history loads from storage with the saved tick.
+    useDashboardStore.setState({ suggestions: [], scannedMessages: [] });
+    mockGetActedSuggestionIds.mockResolvedValue(new Set(["scan-s9-0"]));
+    await useDashboardStore.getState().hydrateScanHistory([
+      makeScan({ id: "s9", classification: "SCAM", suggestedActions: ["Block the sender"] }),
+    ]);
+    expect(useDashboardStore.getState().suggestions).toEqual([
+      expect.objectContaining({ id: "scan-s9-0", acted: true }),
+    ]);
+  });
+
+  it("brings breach actions back ticked when they are registered after a restart", async () => {
+    mockGetActedSuggestionIds.mockResolvedValue(new Set(["breach-b1-0"]));
+    await useDashboardStore.getState().hydrateScanHistory([]);
+
+    useDashboardStore
+      .getState()
+      .registerSuggestions("breach", "b1", ["Change your password", "Turn on 2FA"], { replaceExisting: true });
+
+    expect(useDashboardStore.getState().suggestions).toEqual([
+      expect.objectContaining({ id: "breach-b1-0", acted: true }),
+      expect.objectContaining({ id: "breach-b1-1", acted: false }),
+    ]);
+  });
+});

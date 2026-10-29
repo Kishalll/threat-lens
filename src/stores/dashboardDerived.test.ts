@@ -1,7 +1,9 @@
 import { calculateSafetyScore } from "../utils/scoreCalculator";
 import {
+  DEFAULT_THREAT_ACTIONS,
   buildScanDashboardState,
   calculateDashboardScore,
+  effectiveSuggestedActions,
   getScannedMessagesFromSuggestions,
   type DashboardStateSlice,
   type TrackedSuggestion,
@@ -95,5 +97,49 @@ describe("dashboardDerived", () => {
       expect.objectContaining({ sourceId: "ok", isFallback: false }),
       expect.objectContaining({ sourceId: "unavailable", isFallback: true }),
     ]);
+  });
+
+  it("gives scam and phishing results default actions when the model suggested none", () => {
+    expect(effectiveSuggestedActions({ classification: "SCAM", suggestedActions: [] })).toEqual(DEFAULT_THREAT_ACTIONS);
+    expect(effectiveSuggestedActions({ classification: "PHISHING", suggestedActions: ["  "] })).toEqual(DEFAULT_THREAT_ACTIONS);
+    expect(effectiveSuggestedActions({ classification: "SAFE", suggestedActions: [] })).toEqual([]);
+    expect(effectiveSuggestedActions({ classification: "SCAM", suggestedActions: ["Block", "block "] })).toEqual(["Block"]);
+  });
+
+  it("uses position-based ids so saved ticks match after a restart", () => {
+    const result = buildScanDashboardState([
+      {
+        id: "s1",
+        timestamp: 1,
+        classification: "SCAM",
+        confidence: 90,
+        messagePreview: "pay now",
+        redFlags: [],
+        suggestedActions: [],
+        explanation: "scam",
+      },
+    ]);
+    expect(result.suggestions.map((s) => s.id)).toEqual(["scan-s1-0", "scan-s1-1"]);
+    expect(result.scannedMessages[0]).toEqual(expect.objectContaining({ totalSuggestions: 2 }));
+  });
+
+  it("recovers part of the penalty per action done and reaches 100 once all are done", () => {
+    const pending: TrackedSuggestion = { id: "scan-s1-1", text: "Delete", acted: false, isFallback: false, source: "scan", sourceId: "s1" };
+    const done: TrackedSuggestion = { id: "scan-s1-0", text: "Block", acted: true, isFallback: false, source: "scan", sourceId: "s1" };
+    const base: DashboardStateSlice = {
+      activeBreachesCount: 0,
+      protectedImagesCount: 0,
+      scannedMessages: [{ id: "s1", riskType: "PHISHING", totalSuggestions: 2, actedSuggestions: 1 }],
+      suggestions: [done, pending],
+    };
+    // Phishing costs 5; one of two actions done recovers half: 97.5 rounds to 98.
+    expect(calculateDashboardScore(base).SafetyScore).toBe(98);
+
+    const allDone: DashboardStateSlice = {
+      ...base,
+      scannedMessages: [{ id: "s1", riskType: "PHISHING", totalSuggestions: 2, actedSuggestions: 2 }],
+      suggestions: [done, { ...pending, acted: true }],
+    };
+    expect(calculateDashboardScore(allDone).SafetyScore).toBe(100);
   });
 });

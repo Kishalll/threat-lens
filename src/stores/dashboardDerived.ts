@@ -27,6 +27,37 @@ export function normalizeSuggestionText(text: string): string {
   return text.trim().replace(/\s+/g, " ");
 }
 
+// Stable across restarts, so a ticked action saved under this id is found again.
+export function suggestionId(source: SuggestionSource, sourceId: string, index: number): string {
+  return `${source}-${sourceId}-${index}`;
+}
+
+// Normalised, non-empty and de-duplicated (ignoring case), in their original order.
+export function uniqueSuggestionTexts(texts: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const text of texts.map(normalizeSuggestionText)) {
+    const key = text.toLowerCase();
+    if (text.length > 0 && !seen.has(key)) {
+      seen.add(key);
+      unique.push(text);
+    }
+  }
+  return unique;
+}
+
+// A scam or phishing result always has something to act on, so its score
+// penalty can be cleared even when the model suggested nothing.
+export const DEFAULT_THREAT_ACTIONS = ["Block the sender", "Delete the message"];
+
+export function effectiveSuggestedActions(result: Pick<ScanResult, "classification" | "suggestedActions">): string[] {
+  const actions = uniqueSuggestionTexts(result.suggestedActions);
+  if (actions.length === 0 && (result.classification === "SCAM" || result.classification === "PHISHING")) {
+    return DEFAULT_THREAT_ACTIONS;
+  }
+  return actions;
+}
+
 export function getScannedMessagesFromSuggestions(
   state: Pick<DashboardStateSlice, "scannedMessages" | "suggestions">
 ): ScannedMessage[] {
@@ -137,16 +168,14 @@ export function buildScanDashboardState(scanResults: ScanResult[]): {
     .map((result) => ({
       id: result.id,
       riskType: result.classification,
-      totalSuggestions: result.suggestedActions.length,
+      totalSuggestions: effectiveSuggestedActions(result).length,
       actedSuggestions: 0,
     })) as ScannedMessage[];
 
   const suggestions = scanResults.flatMap((result) =>
-    result.suggestedActions
-      .map(normalizeSuggestionText)
-      .filter((text) => text.length > 0)
+    effectiveSuggestedActions(result)
       .map((text, index) => ({
-        id: `scan-${result.id}-${index}`,
+        id: suggestionId("scan", result.id, index),
         text,
         acted: false,
         isFallback: result.classification === "UNAVAILABLE",

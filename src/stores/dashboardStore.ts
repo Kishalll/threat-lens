@@ -3,9 +3,10 @@ import type { ScanResult } from "../types";
 import type { ScannedMessage } from "../utils/scoreCalculator";
 import {
   buildScanDashboardState,
+  suggestionId,
+  uniqueSuggestionTexts,
   calculateDashboardScore,
   getScannedMessagesFromSuggestions,
-  normalizeSuggestionText,
   type SuggestionSource,
   type TrackedSuggestion,
 } from "./dashboardDerived";
@@ -31,6 +32,11 @@ function withDerivedState(
     ...calculateDashboardScore(nextState),
   };
 }
+
+// Ids of actions ticked as done, as saved in the database. Loaded with the scan
+// history and kept in step with each new tick, so actions registered later
+// (breach guidance, a re-opened scan) come back already ticked.
+let savedActedIds = new Set<string>();
 
 export interface DashboardState {
   activeBreachesCount: number;
@@ -92,11 +98,9 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   },
 
   registerSuggestions: (source, sourceId, suggestionTexts, options) => {
-    const normalized = suggestionTexts
-      .map(normalizeSuggestionText)
-      .filter((text) => text.length > 0);
+    const incoming = uniqueSuggestionTexts(suggestionTexts);
 
-    if (normalized.length === 0 && !options?.replaceExisting) {
+    if (incoming.length === 0 && !options?.replaceExisting) {
       return;
     }
 
@@ -104,51 +108,30 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const existingForSource = state.suggestions.filter(
         (suggestion) => suggestion.source === source && suggestion.sourceId === sourceId
       );
-
-      const uniqueIncoming = Array.from(
-        new Set(normalized.map((text) => text.toLowerCase()))
-      ).map(
-        (textLower) =>
-          normalized.find((value) => value.toLowerCase() === textLower) as string
+      const existingByText = new Map(
+        existingForSource.map((suggestion) => [suggestion.text.toLowerCase(), suggestion])
       );
 
-      const existingTextSet = new Set(
-        existingForSource.map((suggestion) => suggestion.text.toLowerCase())
-      );
+      // Ids follow the action's position, so a tick saved before a restart is found again.
+      const build = (text: string, index: number): TrackedSuggestion => {
+        const id = suggestionId(source, sourceId, index);
+        const existing = existingByText.get(text.toLowerCase());
+        return {
+          id,
+          text,
+          acted: existing?.acted === true || savedActedIds.has(id),
+          isFallback: options?.isFallback === true,
+          source,
+          sourceId,
+        };
+      };
 
+      let suggestions: TrackedSuggestion[];
       if (options?.replaceExisting) {
-        const existingByText = new Map(
-          existingForSource.map((suggestion) => [
-            suggestion.text.toLowerCase(),
-            suggestion,
-          ])
-        );
-
-        const replacementSuggestions: TrackedSuggestion[] = uniqueIncoming.map(
-          (text, index) => {
-            const existing = existingByText.get(text.toLowerCase());
-            if (existing) {
-              return {
-                ...existing,
-                text,
-                isFallback: options?.isFallback === true,
-              };
-            }
-
-            return {
-              id: `${source}-${sourceId}-${Date.now()}-${index}`,
-              text,
-              acted: false,
-              isFallback: options?.isFallback === true,
-              source,
-              sourceId,
-            };
-          }
-        );
-
-        const noSourceChange =
-          replacementSuggestions.length === existingForSource.length &&
-          replacementSuggestions.every((suggestion, index) => {
+        const replacements = incoming.map(build);
+        const unchanged =
+          replacements.length === existingForSource.length &&
+          replacements.every((suggestion, index) => {
             const current = existingForSource[index];
             return (
               current?.id === suggestion.id &&
@@ -157,45 +140,25 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
               current?.isFallback === suggestion.isFallback
             );
           });
-
-        if (noSourceChange) {
+        if (unchanged) {
           return state;
         }
-
-        const suggestions = [
+        suggestions = [
           ...state.suggestions.filter(
-            (suggestion) =>
-              !(suggestion.source === source && suggestion.sourceId === sourceId)
+            (suggestion) => !(suggestion.source === source && suggestion.sourceId === sourceId)
           ),
-          ...replacementSuggestions,
+          ...replacements,
         ];
-        const scannedMessages = getScannedMessagesFromSuggestions({
-          ...state,
-          suggestions,
-        });
-
-        return withDerivedState(state, {
-          suggestions,
-          scannedMessages,
-        });
+      } else {
+        const additions = incoming
+          .map(build)
+          .filter((suggestion) => !existingByText.has(suggestion.text.toLowerCase()));
+        if (additions.length === 0) {
+          return state;
+        }
+        suggestions = [...state.suggestions, ...additions];
       }
 
-      const additions: TrackedSuggestion[] = uniqueIncoming
-        .filter((text) => !existingTextSet.has(text.toLowerCase()))
-        .map((text, index) => ({
-          id: `${source}-${sourceId}-${Date.now()}-${index}`,
-          text,
-          acted: false,
-          isFallback: options?.isFallback === true,
-          source,
-          sourceId,
-        }));
-
-      if (additions.length === 0) {
-        return state;
-      }
-
-      const suggestions = [...state.suggestions, ...additions];
       const scannedMessages = getScannedMessagesFromSuggestions({
         ...state,
         suggestions,
@@ -231,8 +194,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         "[dashboardStore] Failed to load acted suggestions; continuing with empty set",
         error
       );
-      actedIds = new Set();
+      // Keep the ticks already known this session rather than forgetting them.
+      actedIds = new Set(savedActedIds);
     }
+
+    savedActedIds = actedIds;
 
     set((state) => {
       const scanDerived = buildScanDashboardState(scanResults);
@@ -282,6 +248,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     });
 
     if (shouldPersist) {
+      savedActedIds.add(id);
       insertActedSuggestion(id).catch((error) => {
         console.warn(
           "[dashboardStore] Failed to persist acted suggestion",

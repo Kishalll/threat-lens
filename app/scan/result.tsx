@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
 import { useScannerStore } from "../../src/stores/scannerStore";
 import { useDashboardStore } from "../../src/stores/dashboardStore";
+import { effectiveSuggestedActions } from "../../src/stores/dashboardDerived";
 import { getScanResult } from "../../src/services/storageService";
 import { THEME } from "../../src/constants/theme";
 import { makeStyles, useTheme } from "../../src/hooks/useTheme";
@@ -77,11 +78,12 @@ export default function ScanResultScreen() {
   );
 
   useEffect(() => {
-    if (!record || record.suggestedActions.length === 0) {
+    const actions = record ? effectiveSuggestedActions(record) : [];
+    if (!record || actions.length === 0) {
       return;
     }
 
-    registerSuggestions("scan", record.id, record.suggestedActions);
+    registerSuggestions("scan", record.id, actions);
   }, [record, registerSuggestions]);
 
   if (!record) {

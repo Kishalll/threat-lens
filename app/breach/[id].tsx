@@ -176,9 +176,11 @@ export default function BreachDetailScreen() {
       return;
     }
 
-    syncBreachResolutionFromSuggestions({
-      [breach.id]: isSecured,
-    });
+    // Only ever mark resolved here. Un-resolving on open would bring a finished
+    // breach's penalty back whenever its ticks hadn't loaded yet.
+    if (isSecured) {
+      syncBreachResolutionFromSuggestions({ [breach.id]: true });
+    }
   }, [breach, isSecured, syncBreachResolutionFromSuggestions]);
 
   if (!breach) {

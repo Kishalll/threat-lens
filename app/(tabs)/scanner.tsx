@@ -9,6 +9,13 @@ import { makeStyles, useTheme } from "../../src/hooks/useTheme";
 import SettingsButton from "../../src/components/settings/SettingsButton";
 import ScannerSettings from "../../src/components/scanner/ScannerSettings";
 import { TAB_BAR_CLEARANCE } from "../../src/components/SwipeTabBar";
+import HistoryFilters from "../../src/components/scanner/HistoryFilters";
+import {
+  HISTORY_FILTERS,
+  countByHistoryFilter,
+  matchesHistoryFilter,
+  type HistoryFilter,
+} from "../../src/utils/historyFilters";
 
 export default function ScannerScreen() {
   const styles = useStyles();
@@ -20,6 +27,7 @@ export default function ScannerScreen() {
   const [textToScan, setTextToScan] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [lastFailedInput, setLastFailedInput] = useState<string>("");
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
 
   const pendingActionsByScanId = useMemo(() => {
     const pendingById = new Map<string, number>();
@@ -35,6 +43,16 @@ export default function ScannerScreen() {
 
     return pendingById;
   }, [suggestions]);
+
+  const filterCounts = useMemo(
+    () => countByHistoryFilter(scannerStore.history, pendingActionsByScanId),
+    [scannerStore.history, pendingActionsByScanId]
+  );
+  const visibleHistory = useMemo(
+    () => scannerStore.history.filter((scan) => matchesHistoryFilter(scan, historyFilter, pendingActionsByScanId)),
+    [scannerStore.history, historyFilter, pendingActionsByScanId]
+  );
+  const emptyMessage = HISTORY_FILTERS.find((filter) => filter.value === historyFilter)?.empty ?? "";
 
   useEffect(() => {
     const rawPrefill = Array.isArray(prefill) ? prefill[0] : prefill;
@@ -177,11 +195,15 @@ export default function ScannerScreen() {
 
       <Text style={styles.sectionTitle}>Scan History</Text>
       
-      {scannerStore.history.length === 0 ? (
-        <Text style={styles.emptyText}>No manual scans yet. Paste a message above.</Text>
+      {scannerStore.history.length > 0 ? (
+        <HistoryFilters value={historyFilter} counts={filterCounts} onChange={setHistoryFilter} />
+      ) : null}
+
+      {visibleHistory.length === 0 ? (
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
       ) : (
         <ScrollView style={styles.historyList} contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
-          {scannerStore.history.map((record, index) => {
+          {visibleHistory.map((record, index) => {
             const statusColor = getStatusColor(record.classification);
             const pendingActions = pendingActionsByScanId.get(record.id) ?? 0;
             return (
@@ -371,6 +393,7 @@ const useStyles = makeStyles((colors) => ({
     lineHeight: 21,
   },
   emptyText: {
+    marginTop: 12,
     color: colors.textTertiary,
     fontFamily: THEME.fontFamily.dmSans,
     fontStyle: "italic",

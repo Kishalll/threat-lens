@@ -9,6 +9,7 @@ import {
   insertScanResult,
 } from "../services/storageService";
 import { useDashboardStore } from "./dashboardStore";
+import { effectiveSuggestedActions } from "./dashboardDerived";
 import { useSettingsStore } from "./settingsStore";
 import { log } from "../utils/activityLog";
 import { retentionCutoff } from "../utils/settings";
@@ -38,16 +39,17 @@ function syncHistoryToDashboard(history: ScanResult[]): Promise<void> {
 
 function recordScanInDashboard(result: ScanResult): void {
   const dash = useDashboardStore.getState();
+  const actions = effectiveSuggestedActions(result);
   if (result.classification !== "UNAVAILABLE") {
     dash.recordScannedMessage({
       id: result.id,
       riskType: result.classification,
-      totalSuggestions: result.suggestedActions.length,
+      totalSuggestions: actions.length,
       actedSuggestions: 0,
     });
   }
 
-  dash.registerSuggestions("scan", result.id, result.suggestedActions, {
+  dash.registerSuggestions("scan", result.id, actions, {
     isFallback: result.classification === "UNAVAILABLE",
   });
 }
